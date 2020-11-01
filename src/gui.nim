@@ -15,7 +15,11 @@ proc checkChan() =
   ## Handle any incoming message from network I/O
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
-    inText.text = now().format("H:mm:ss ") & msgTuple.msg
+    case msgTuple.msg.req
+    of "result":
+      inText.text = now().format("H:mm:ss ") & msgTuple.msg.payload
+    else:
+      echo("msg not understood: " & msgTuple.msg.req & ", len: " & $msgTuple.msg.req.len)
 
 proc startApplication() =
     var wnd = newWindow(newRect(40, 40, 800, 600))
@@ -38,11 +42,13 @@ proc startApplication() =
     wnd.addSubview(outLabel)
 
     let button = newButton(newRect(80, 40, 100, 22))
-    button.title = "Send It!"
+    button.title = "Send Msg"
+    button.onAction do():
+        ctxChan.send( CoMsg(req: "send_msg") )
     wnd.addSubview(button)
 
     # periodically check for messages from network I/O
-    var timer = newTimer(0.5, true, checkChan)
+    discard newTimer(0.5, true, checkChan)
 
     # start network I/O (see conet.nim)
     spawn netLoop()
