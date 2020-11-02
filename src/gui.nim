@@ -12,7 +12,7 @@ import threadpool, conet
 var inText: TextField
 
 proc checkChan() =
-  ## Handle any incoming message from network I/O
+  ## Handle any incoming message from the conet channel
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
     case msgTuple.msg.req
@@ -47,10 +47,10 @@ proc startApplication() =
         ctxChan.send( CoMsg(req: "send_msg") )
     wnd.addSubview(button)
 
-    # periodically check for messages from network I/O
+    # periodically check for messages from conet channel
     discard newTimer(0.5, true, checkChan)
 
-    # start network I/O (see conet.nim)
+    # Start network I/O (see conet.nim)
     spawn netLoop()
 
 runApplication:

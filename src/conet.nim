@@ -10,7 +10,7 @@ import logging
 
 type
   CoMsg* = object
-    ## A REST-like message for use in the channel
+    ## A REST-like message for use in a channel with the enclosing context
     req*: string
     payload*: string
 
@@ -39,7 +39,7 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
 
 
 proc sendMessage(ctx: CContext) =
-  ## Send a message to exercise client flow
+  ## Send a message to exercise client flow with a server
 
   # init server address/port
   let address = create(CSockAddr)
