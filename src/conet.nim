@@ -28,14 +28,20 @@ proc handleHi(context: CContext, resource: CResource, session: CSession,
   resp.code = COAP_RESPONSE_CODE_205
   discard addData(resp, 5, "Howdy")
   let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  netChan.send( CoMsg(req: "result", payload: remote & " GET /hi") )
+  netChan.send( CoMsg(req: "request.log", payload: remote & " GET /hi") )
 
 proc handleResponse(context: CContext, session: CSession, sent: CPdu,
                     received: CPdu, id: CTxid) {.exportc: "hnd_response",
                     noconv.} =
   ## client response handler
   #log.log(lvlDebug, "Response received")
-  echo("Response received")
+  var dataLen: csize_t
+  var dataPtr: ptr uint8
+  var ok = getData(received, addr dataLen, addr dataPtr)
+
+  var dataStr = newString(dataLen)
+  copyMem(addr dataStr[0], dataPtr, dataLen)
+  netChan.send( CoMsg(req: "response.payload", payload: dataStr) )
 
 
 proc sendMessage(ctx: CContext) =

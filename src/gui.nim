@@ -10,14 +10,17 @@ import times
 import threadpool, conet
 
 var inText: TextField
+var outText: TextField
 
 proc checkChan() =
   ## Handle any incoming message from the conet channel
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
     case msgTuple.msg.req
-    of "result":
+    of "request.log":
       inText.text = now().format("H:mm:ss ") & msgTuple.msg.payload
+    of "response.payload":
+      outText.text = msgTuple.msg.payload
     else:
       echo("msg not understood: " & msgTuple.msg.req & ", len: " & $msgTuple.msg.req.len)
 
@@ -39,7 +42,10 @@ proc startApplication() =
     let outLabelText = newFormattedText("Out:")
     outLabelText.horizontalAlignment = haRight
     outLabel.formattedText = outLabelText
+
+    outText = newLabel(newRect(60, 50, 700, 60))
     wnd.addSubview(outLabel)
+    wnd.addSubview(outText)
 
     let button = newButton(newRect(80, 40, 100, 22))
     button.title = "Send Msg"

@@ -156,6 +156,9 @@ proc addData*(pdu: CPdu, len: csize_t, data: cstring): cint
 
 proc deletePdu*(pdu: CPdu) {.importc: "coap_delete_pdu".}
 
+proc getData*(pdu: CPdu, len: ptr csize_t, data: ptr ptr uint8): cint
+             {.importc: "coap_get_data".}
+
 proc initPdu*(`type`: uint8, code: uint8, txid: uint16 = 0, size: csize_t): CPdu
               {.importc: "coap_pdu_init".}
   ## 'type' is one of the COAP_MESSAGE... constants
