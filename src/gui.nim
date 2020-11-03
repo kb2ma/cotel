@@ -109,3 +109,7 @@ proc startApplication() =
 
 runApplication:
     startApplication()
+
+# Disables these warnings for gui_... module imports. They actually *are*
+# used, but code that generates this warning does not realize that.
+{.warning[UnusedImport]:off.}

@@ -14,6 +14,8 @@ type
 var outText: TextField
 
 method onChanMsg(v: ClientView, msg: CoMsg) =
+  # silence warning; for some reason can't use this in .nims file
+  {.warning[LockLevel]:off.}
   if msg.req == "response.payload":
     outText.text = msg.payload
 

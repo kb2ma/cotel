@@ -37,7 +37,7 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   #log.log(lvlDebug, "Response received")
   var dataLen: csize_t
   var dataPtr: ptr uint8
-  var ok = getData(received, addr dataLen, addr dataPtr)
+  discard getData(received, addr dataLen, addr dataPtr)
 
   var dataStr = newString(dataLen)
   copyMem(addr dataStr[0], dataPtr, dataLen)
@@ -109,7 +109,7 @@ proc netLoop*() =
   address.`addr`.sin.sin_family = Domain.AF_INET.cushort
   address.`addr`.sin.sin_port = posix.htons(5683)
 
-  var ep = newEndpoint(ctx, address, COAP_PROTO_UDP)
+  discard newEndpoint(ctx, address, COAP_PROTO_UDP)
 
   log.log(lvlInfo, "Cotel networking started on port ",
           posix.ntohs(address.`addr`.sin.sin_port))
