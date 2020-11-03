@@ -5,53 +5,99 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ button, formatted_text, text_field, timer, window ]
-import times
-import threadpool, conet
+import nimx / [ segmented_control, timer, view, window ]
+import tables, threadpool, conet
 
-var inText: TextField
-var outText: TextField
+method onChanMsg(v: View, msg: CoMsg) {.base.} =
+  ## A View handles channel messages from the network. A subclass handles
+  ## a message it is interested in.
+  ##
+  ## Must define this base method before GUI views because they are expected to
+  ## override it.
+  echo("checkChan msg: " & msg.req)
+
+method restoreState(v: View) {.base.} =
+  echo("default restoreState")
+
+method saveState(v: View) {.base.} =
+  echo("default saveState")
+
+# subviews
+import gui_client, gui_server
+
+type
+  CachedViews = tuple[server: View, client: View]
+
+var
+  wnd: Window
+  currentView: View
+  cachedViews: CachedViews
 
 proc checkChan() =
   ## Handle any incoming message from the conet channel
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
-    case msgTuple.msg.req
-    of "request.log":
-      inText.text = now().format("H:mm:ss ") & msgTuple.msg.payload
-    of "response.payload":
-      outText.text = msgTuple.msg.payload
+    currentView.onChanMsg(msgTuple.msg)
+
+proc selectView(scName: string) =
+  var
+    selName: string
+    selView: View
+    isNew = false
+
+  currentView.saveState()
+
+  case scName
+  of "Server":
+    selName = "ServerView"
+    if cachedViews.server != nil:
+      selView = cachedViews.server
+      echo("cached server")
     else:
-      echo("msg not understood: " & msgTuple.msg.req & ", len: " & $msgTuple.msg.req.len)
+      cachedViews.server = View(newObjectOfClass(selName))
+      selView = cachedViews.server
+      isNew = true
+      echo("new server")
+  of "Client":
+    selName = "ClientView"
+    if cachedViews.client != nil:
+      selView = cachedViews.client
+    else:
+      cachedViews.client = View(newObjectOfClass(selName))
+      selView = cachedViews.client
+      isNew = true
+  else:
+    echo("View name unknown: " & scName)
+    return
+
+  selView.init(currentView.frame)
+  if not isNew:
+    selView.restoreState()
+    
+  selView.resizingMask = "wh"
+  wnd.replaceSubview(currentView, selView)
+  currentView = selView
+
 
 proc startApplication() =
-    var wnd = newWindow(newRect(40, 40, 800, 600))
+    wnd = newWindow(newRect(40, 40, 800, 600))
     wnd.title = "Cotel"
+    let headerView = View.new(newRect(0, 0, wnd.bounds.width, 30))
+    wnd.addSubview(headerView)
 
-    let inLabel = newLabel(newRect(20, 10, 35, 20))
-    let inLabelText = newFormattedText("In:")
-    inLabelText.horizontalAlignment = haRight
-    inLabel.formattedText = inLabelText
+    # add an empty body view at startup
+    currentView = View.new(newRect(0, 30, wnd.bounds.width,
+                                   wnd.bounds.height - headerView.bounds.height))
+    currentView.name = "empty"
+    wnd.addSubview(currentView)
 
-    inText = newLabel(newRect(60, 10, 500, 20))
-    inText.text = "<not yet>"
-    wnd.addSubview(inLabel)
-    wnd.addSubview(inText)
-
-    let outLabel = newLabel(newRect(20, 40, 35, 50))
-    let outLabelText = newFormattedText("Out:")
-    outLabelText.horizontalAlignment = haRight
-    outLabel.formattedText = outLabelText
-
-    outText = newLabel(newRect(60, 50, 700, 60))
-    wnd.addSubview(outLabel)
-    wnd.addSubview(outText)
-
-    let button = newButton(newRect(80, 40, 100, 22))
-    button.title = "Send Msg"
-    button.onAction do():
-        ctxChan.send( CoMsg(req: "send_msg") )
-    wnd.addSubview(button)
+    let sc = SegmentedControl.new(newRect(10, 10, 160, 22))
+    sc.segments = @["Client", "Server"]
+    sc.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
+    # display selected view
+    sc.onAction do():
+      selectView(sc.segments[sc.selectedSegment])
+    headerView.addSubview(sc)
 
     # periodically check for messages from conet channel
     discard newTimer(0.5, true, checkChan)
