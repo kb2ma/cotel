@@ -17,21 +17,21 @@ method onChanMsg(v: View, msg: CoMsg) {.base.} =
   echo("checkChan msg: " & msg.req)
 
 method restoreState(v: View) {.base.} =
-  echo("default restoreState")
+  ## no action by default
 
 method saveState(v: View) {.base.} =
-  echo("default saveState")
+  ## no action by default
 
 # subviews
 import gui_client, gui_server
 
-type
-  CachedViews = tuple[server: View, client: View]
-
 var
   wnd: Window
+    ## top level UI object
   currentView: View
-  cachedViews: CachedViews
+    ## subview currently being displayed, for example server view or client view
+  cachedViews = new Table[string, View]
+    ## cache of displayed views, for reuse if reselected
 
 proc checkChan() =
   ## Handle any incoming message from the conet channel
@@ -39,41 +39,34 @@ proc checkChan() =
   if msgTuple.dataAvailable:
     currentView.onChanMsg(msgTuple.msg)
 
-proc selectView(scName: string) =
+proc onSelectView(scName: string) =
+  ## Display the view for the selected view name. First saves the state of
+  ## the current view. If the selected view already has been displayed,
+  ## restore its state.
   var
-    selName: string
+    viewName: string
     selView: View
-    isNew = false
 
   currentView.saveState()
 
   case scName
   of "Server":
-    selName = "ServerView"
-    if cachedViews.server != nil:
-      selView = cachedViews.server
-      echo("cached server")
-    else:
-      cachedViews.server = View(newObjectOfClass(selName))
-      selView = cachedViews.server
-      isNew = true
-      echo("new server")
+    viewName = "ServerView"
   of "Client":
-    selName = "ClientView"
-    if cachedViews.client != nil:
-      selView = cachedViews.client
-    else:
-      cachedViews.client = View(newObjectOfClass(selName))
-      selView = cachedViews.client
-      isNew = true
+    viewName = "ClientView"
   else:
     echo("View name unknown: " & scName)
     return
 
-  selView.init(currentView.frame)
-  if not isNew:
+  if cachedViews.hasKey(viewName):
+    selView = cachedViews[viewName]
+    selView.init(currentView.frame)
     selView.restoreState()
-    
+  else:
+    selView = View(newObjectOfClass(viewName))
+    selView.init(currentView.frame)
+    cachedViews.add(viewName, selView)
+
   selView.resizingMask = "wh"
   wnd.replaceSubview(currentView, selView)
   currentView = selView
@@ -96,7 +89,7 @@ proc startApplication() =
     sc.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
     # display selected view
     sc.onAction do():
-      selectView(sc.segments[sc.selectedSegment])
+      onSelectView(sc.segments[sc.selectedSegment])
     headerView.addSubview(sc)
 
     # periodically check for messages from conet channel
@@ -104,6 +97,9 @@ proc startApplication() =
 
     # Start network I/O (see conet.nim)
     spawn netLoop()
+
+    # UI selects client in selection control, so sync the displayed view
+    onSelectView("Client")
 
 runApplication:
     startApplication()
