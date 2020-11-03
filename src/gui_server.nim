@@ -19,12 +19,13 @@ var
 method onChanMsg(v: ServerView, msg: CoMsg) =
   if msg.req == "request.log":
     inText.text = now().format("H:mm:ss ") & msg.payload
+    v.state.inText = inText.text
 
-method restoreState(v: ServerView) =
-  inText.text = v.state.inText
+#method onShow(v: ServerView) =
+#  inText.text = v.state.inText
 
-method saveState(v: ServerView) =
-  v.state.inText = inText.text
+#method onHide(v: ServerView) =
+#  v.state.inText = inText.text
 
 method init*(v: ServerView, r: Rect) =
   procCall v.View.init(r)

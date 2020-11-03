@@ -16,10 +16,10 @@ method onChanMsg(v: View, msg: CoMsg) {.base.} =
   ## override it.
   echo("checkChan msg: " & msg.req)
 
-method restoreState(v: View) {.base.} =
+method onShow(v: View) {.base.} =
   ## no action by default
 
-method saveState(v: View) {.base.} =
+method onHide(v: View) {.base.} =
   ## no action by default
 
 # subviews
@@ -37,7 +37,8 @@ proc checkChan() =
   ## Handle any incoming message from the conet channel
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
-    currentView.onChanMsg(msgTuple.msg)
+    for view in cachedViews.values():
+      view.onChanMsg(msgTuple.msg)
 
 proc onSelectView(scName: string) =
   ## Display the view for the selected view name. First saves the state of
@@ -47,7 +48,7 @@ proc onSelectView(scName: string) =
     viewName: string
     selView: View
 
-  currentView.saveState()
+  currentView.onHide()
 
   case scName
   of "Server":
@@ -61,7 +62,7 @@ proc onSelectView(scName: string) =
   if cachedViews.hasKey(viewName):
     selView = cachedViews[viewName]
     selView.init(currentView.frame)
-    selView.restoreState()
+    selView.onShow()
   else:
     selView = View(newObjectOfClass(viewName))
     selView.init(currentView.frame)
@@ -98,6 +99,11 @@ proc startApplication() =
     # Start network I/O (see conet.nim)
     spawn netLoop()
 
+    # Initialize server view even though not displayed. Server view provides a
+    # a monitor of the underlying server activity. In other words, the user
+    # wants to see *all* server activity, regardless of whether the server view
+    # is actually visible when the activity occurs.
+    onSelectView("Server")
     # UI selects client in selection control, so sync the displayed view
     onSelectView("Client")
 
