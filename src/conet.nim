@@ -14,11 +14,12 @@ type
     req*: string
     payload*: string
 
-var netChan*: Channel[CoMsg]
+var
+  netChan*: Channel[CoMsg]
   ## Communication channel from conet to enclosing context
-var ctxChan*: Channel[CoMsg]
+  ctxChan*: Channel[CoMsg]
   ## Communication channel from enclosing context to conet
-
+  log {.threadvar.}: FileLogger
 
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -56,33 +57,33 @@ proc sendMessage(ctx: CContext) =
     address.`addr`.sin = cast[SockAddr_in](info.ai_addr[])
     freeaddrinfo(info)
   except OSError:
-    error("Can't resolve server address")
+    log.log(lvlError, "Can't resolve server address")
     return
 
   #init session
   var session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
   if session == nil:
-    error("Can't create client session")
+    log.log(lvlError, "Can't create client session")
     return
 
   # init PDU, including type and code
   var pdu = initPdu(COAP_MESSAGE_CON, COAP_REQUEST_GET.uint8, 1000'u16,
                     maxSessionPduSize(session))
   if pdu == nil:
-    error("Can't create client PDU")
+    log.log(lvlError, "Can't create client PDU")
     releaseSession(session)
     return
 
   # add Uri-Path option
   var optlist = newOptlist(COAP_OPTION_URI_PATH, 4.csize_t, cast[ptr uint8]("time"))
   if optlist == nil:
-    error("Can't create option list")
+    log.log(lvlError, "Can't create option list")
     return
   if addOptlistPdu(pdu, addr(optlist)) == 0:
-    error("Can't create option list")
+    #error("Can't create option list")
     deleteOptlist(optlist)
-    releaseSession(session)
     deletePdu(pdu)
+    releaseSession(session)
     return
   deleteOptlist(optlist)
 
@@ -90,13 +91,10 @@ proc sendMessage(ctx: CContext) =
   if send(session, pdu) == COAP_INVALID_TXID:
     deletePdu(pdu)
 
-  # clean up
-  #releaseSession(session)
-
 
 proc netLoop*(serverPort: int) =
   ## Setup server and run event loop
-  var log = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
+  log = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   open(netChan)
   open(ctxChan)
 
@@ -130,6 +128,11 @@ proc netLoop*(serverPort: int) =
       case msgTuple.msg.req
       of "send_msg":
         send_message(ctx)
+      of "quit":
+        break
       else:
         log.log(lvlError, "msg not understood: " & msgTuple.msg.req)
 
+  if ctx != nil:
+    freeContext(ctx)
+  log.log(lvlInfo, "Exiting net gracefully")
