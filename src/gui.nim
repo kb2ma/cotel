@@ -6,7 +6,8 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import nimx / [ segmented_control, timer, view, window ]
-import tables, threadpool, conet
+import tables, threadpool, parseOpt
+import conet, gui_util
 
 method onChanMsg(v: View, msg: CoMsg) {.base.} =
   ## A View handles channel messages from the network. A subclass handles
@@ -73,43 +74,64 @@ proc onSelectView(scName: string) =
   currentView = selView
 
 
-proc startApplication() =
-    wnd = newWindow(newRect(40, 40, 800, 600))
-    wnd.title = "Cotel"
-    let headerView = View.new(newRect(0, 0, wnd.bounds.width, 30))
-    wnd.addSubview(headerView)
+proc startApplication(conf: CotelConf) =
+  wnd = newWindow(newRect(40, 40, 800, 600))
+  wnd.title = "Cotel"
+  let headerView = View.new(newRect(0, 0, wnd.bounds.width, 30))
+  wnd.addSubview(headerView)
 
-    # add an empty body view at startup
-    currentView = View.new(newRect(0, 30, wnd.bounds.width,
-                                   wnd.bounds.height - headerView.bounds.height))
-    currentView.name = "empty"
-    wnd.addSubview(currentView)
+  # add an empty body view at startup
+  currentView = View.new(newRect(0, 30, wnd.bounds.width,
+                                 wnd.bounds.height - headerView.bounds.height))
+  currentView.name = "empty"
+  wnd.addSubview(currentView)
 
-    let sc = SegmentedControl.new(newRect(10, 10, 160, 22))
-    sc.segments = @["Client", "Server"]
-    sc.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
-    # display selected view
-    sc.onAction do():
-      onSelectView(sc.segments[sc.selectedSegment])
-    headerView.addSubview(sc)
+  let sc = SegmentedControl.new(newRect(10, 10, 160, 22))
+  sc.segments = @["Client", "Server"]
+  sc.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
+  # display selected view
+  sc.onAction do():
+    onSelectView(sc.segments[sc.selectedSegment])
+  headerView.addSubview(sc)
 
-    # periodically check for messages from conet channel
-    discard newTimer(0.5, true, checkChan)
+  # periodically check for messages from conet channel
+  discard newTimer(0.5, true, checkChan)
 
-    # Start network I/O (see conet.nim)
-    spawn netLoop()
+  # Start network I/O (see conet.nim)
+  spawn netLoop(conf.serverPort)
 
-    # Initialize server view even though not displayed. Server view provides a
-    # a monitor of the underlying server activity. In other words, the user
-    # wants to see *all* server activity, regardless of whether the server view
-    # is actually visible when the activity occurs.
-    onSelectView("Server")
-    # UI selects client in selection control, so sync the displayed view
-    onSelectView("Client")
+  # Initialize server view even though not displayed. Server view provides a
+  # a monitor of the underlying server activity. In other words, the user
+  # wants to see *all* server activity, regardless of whether the server view
+  # is actually visible when the activity occurs.
+  onSelectView("Server")
+  # UI selects client in selection control, so sync the displayed view
+  onSelectView("Client")
 
 runApplication:
-    startApplication()
+  # parse command line options
+  var confName = ""
+  var p = initOptParser()
+  while true:
+    p.next()
+    case p.kind
+    of cmdEnd: break
+    of cmdShortOption, cmdLongOption:
+      if p.key == "c":
+        if p.val == "":
+          echo("Expected conf file name")
+        else:
+          confName = p.val
+      else:
+        echo("Option ", p.key, " not understood")
+    of cmdArgument:
+      echo("Argument ", p.key, " not understood")
 
-# Disables these warnings for gui_... module imports. They actually *are*
-# used, but code that generates this warning does not realize that.
+  var conf = readConfFile(confName)
+
+  startApplication(conf)
+
+
+# Disables these warnings for gui_... module imports above. The modules actually
+# *are* used, but code that generates this warning does not realize that.
 {.warning[UnusedImport]:off.}

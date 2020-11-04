@@ -94,7 +94,7 @@ proc sendMessage(ctx: CContext) =
   #releaseSession(session)
 
 
-proc netLoop*() =
+proc netLoop*(serverPort: int) =
   ## Setup server and run event loop
   var log = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   open(netChan)
@@ -107,7 +107,7 @@ proc netLoop*() =
   var address = create(CSockAddr)
   initAddress(address)
   address.`addr`.sin.sin_family = Domain.AF_INET.cushort
-  address.`addr`.sin.sin_port = posix.htons(5683)
+  address.`addr`.sin.sin_port = posix.htons(serverPort.uint16)
 
   discard newEndpoint(ctx, address, COAP_PROTO_UDP)
 
