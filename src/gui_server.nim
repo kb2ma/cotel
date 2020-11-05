@@ -20,6 +20,9 @@ proc onChanMsg*(state: ServerState, msg: CoMsg) =
     if state.view != nil:
       state.view.inText.text = state.inText
 
+proc update*(v: ServerView, state: ServerState) =
+  v.inText.text = state.inText
+
 method init*(v: ServerView, r: Rect) =
   procCall v.View.init(r)
 

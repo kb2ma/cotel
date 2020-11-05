@@ -19,6 +19,8 @@ import gui_client, gui_server
 var
   clientState = ClientState(view: nil)
   serverState = ServerState(view: nil, inText: "")
+  activeName = ""
+    ## name of the active view/state
 
 proc checkChan() =
   ## Handle any incoming message from the conet channel
@@ -29,42 +31,37 @@ proc checkChan() =
       clientState.onChanMsg(msgTuple.msg)
 
 proc onSelectView(wnd: Window, scName: string) =
-  ## Display the view for the selected view name. First saves the state of
-  ## the current view. If the selected view already has been displayed,
-  ## restore its state.
-  var viewName: string
-  var currentView: View
+  ## Activate/Display the view for the selected name.
+  var activeView: View
 
-  case scName
+  # First detach the currently active view. On first selection there is not an
+  # active view.
+  case activeName
   of "Server":
-    viewName = "ServerView"
-    if clientState.view != nil:
-      currentView = clientState.view
-    clientState.view = nil
-  of "Client":
-    viewName = "ClientView"
-    if serverState.view != nil:
-      currentView = serverState.view
+    activeView = serverState.view
     serverState.view = nil
-  else:
-    echo("View name unknown: " & scName)
-    return
+  of "Client":
+    activeView = clientState.view
+    clientState.view = nil
 
-  let nv = View(newObjectOfClass(viewName))
+  # create/initialize the new view
+  let nv = View(newObjectOfClass(scName & "View"))
   nv.init(newRect(0, 30, wnd.bounds.width, wnd.bounds.height - 30))
   nv.resizingMask = "wh"
 
   case scName
   of "Server":
     serverState.view = cast[ServerView](nv)
-    serverState.view.inText.text = serverState.inText
+    serverState.view.update(serverState)
   of "Client":
     clientState.view = cast[ClientView](nv)
 
-  if currentView != nil:
-    wnd.replaceSubview(currentView, nv)
+  # display the new view
+  if activeName != "":
+    wnd.replaceSubview(activeView, nv)
   else:
     wnd.addSubview(nv)
+  activeName = scName
 
 
 proc startApplication(conf: CotelConf) =
