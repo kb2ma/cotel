@@ -5,93 +5,80 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ segmented_control, timer, view, window ]
+import nimx / [ segmented_control, text_field, timer, view, window ]
 import tables, threadpool, parseOpt
 import conet, gui_util
 
-method onChanMsg(v: View, msg: CoMsg) {.base.} =
-  ## A View handles channel messages from the network. A subclass handles
-  ## a message it is interested in.
-  ##
-  ## Must define this base method before GUI views because they are expected to
-  ## override it.
-  echo("checkChan msg: " & msg.req)
-
-method onShow(v: View) {.base.} =
-  ## no action by default
-
-method onHide(v: View) {.base.} =
-  ## no action by default
+# Disables these warnings for gui_... module imports above. The modules actually
+# *are* used, but code that generates this warning does not realize that.
+{.warning[UnusedImport]:off.}
 
 # subviews
 import gui_client, gui_server
 
 var
-  wnd: Window
-    ## top level UI object
-  currentView: View
-    ## subview currently being displayed, for example server view or client view
-  cachedViews = new Table[string, View]
-    ## cache of displayed views, for reuse if reselected
+  clientState = ClientState(view: nil)
+  serverState = ServerState(view: nil, inText: "")
 
 proc checkChan() =
   ## Handle any incoming message from the conet channel
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
-    for view in cachedViews.values():
-      view.onChanMsg(msgTuple.msg)
+    serverState.onChanMsg(msgTuple.msg)
+    if clientState.view != nil:
+      clientState.onChanMsg(msgTuple.msg)
 
-proc onSelectView(scName: string) =
+proc onSelectView(wnd: Window, scName: string) =
   ## Display the view for the selected view name. First saves the state of
   ## the current view. If the selected view already has been displayed,
   ## restore its state.
-  var
-    viewName: string
-    selView: View
-
-  currentView.onHide()
+  var viewName: string
+  var currentView: View
 
   case scName
   of "Server":
     viewName = "ServerView"
+    if clientState.view != nil:
+      currentView = clientState.view
+    clientState.view = nil
   of "Client":
     viewName = "ClientView"
+    if serverState.view != nil:
+      currentView = serverState.view
+    serverState.view = nil
   else:
     echo("View name unknown: " & scName)
     return
 
-  if cachedViews.hasKey(viewName):
-    selView = cachedViews[viewName]
-    selView.init(currentView.frame)
-    selView.onShow()
-  else:
-    selView = View(newObjectOfClass(viewName))
-    selView.init(currentView.frame)
-    cachedViews.add(viewName, selView)
+  let nv = View(newObjectOfClass(viewName))
+  nv.init(newRect(0, 30, wnd.bounds.width, wnd.bounds.height - 30))
+  nv.resizingMask = "wh"
 
-  selView.resizingMask = "wh"
-  wnd.replaceSubview(currentView, selView)
-  currentView = selView
+  case scName
+  of "Server":
+    serverState.view = cast[ServerView](nv)
+    serverState.view.inText.text = serverState.inText
+  of "Client":
+    clientState.view = cast[ClientView](nv)
+
+  if currentView != nil:
+    wnd.replaceSubview(currentView, nv)
+  else:
+    wnd.addSubview(nv)
 
 
 proc startApplication(conf: CotelConf) =
-  wnd = newWindow(newRect(40, 40, 800, 600))
+  let wnd = newWindow(newRect(40, 40, 800, 600))
   wnd.title = "Cotel"
   let headerView = View.new(newRect(0, 0, wnd.bounds.width, 30))
   wnd.addSubview(headerView)
-
-  # add an empty body view at startup
-  currentView = View.new(newRect(0, 30, wnd.bounds.width,
-                                 wnd.bounds.height - headerView.bounds.height))
-  currentView.name = "empty"
-  wnd.addSubview(currentView)
 
   let sc = SegmentedControl.new(newRect(10, 10, 160, 22))
   sc.segments = @["Client", "Server"]
   sc.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   # display selected view
   sc.onAction do():
-    onSelectView(sc.segments[sc.selectedSegment])
+    onSelectView(wnd, sc.segments[sc.selectedSegment])
   headerView.addSubview(sc)
 
   # periodically check for messages from conet channel
@@ -100,13 +87,8 @@ proc startApplication(conf: CotelConf) =
   # Start network I/O (see conet.nim)
   spawn netLoop(conf.serverPort)
 
-  # Initialize server view even though not displayed. Server view provides a
-  # a monitor of the underlying server activity. In other words, the user
-  # wants to see *all* server activity, regardless of whether the server view
-  # is actually visible when the activity occurs.
-  onSelectView("Server")
-  # UI selects client in selection control, so sync the displayed view
-  onSelectView("Client")
+  onSelectView(wnd, "Client")
+
 
 runApplication:
   # parse command line options
@@ -127,11 +109,6 @@ runApplication:
     of cmdArgument:
       echo("Argument ", p.key, " not understood")
 
-  var conf = readConfFile(confName)
+  let conf = readConfFile(confName)
 
   startApplication(conf)
-
-
-# Disables these warnings for gui_... module imports above. The modules actually
-# *are* used, but code that generates this warning does not realize that.
-{.warning[UnusedImport]:off.}
