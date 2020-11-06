@@ -53,7 +53,8 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
   let address = create(CSockAddr)
   initAddress(address)
   try:
-    let info = getAddrInfo("127.0.0.1", 5685.Port, Domain.AF_INET,
+    let port = reqJson["remPort"].getInt()
+    let info = getAddrInfo("127.0.0.1", port.Port, Domain.AF_INET,
                            SockType.SOCK_DGRAM, Protocol.IPPROTO_UDP)
     address.`addr`.sin = cast[SockAddr_in](info.ai_addr[])
     freeaddrinfo(info)
