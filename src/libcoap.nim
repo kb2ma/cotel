@@ -171,6 +171,9 @@ proc addOptlistPdu*(pdu: CPdu, chain: ptr COptlist): cint
 proc deleteOptlist*(list: COptlist) {.importc: "coap_delete_optlist".}
   ## Must delete optlist created by newOptlist
 
+proc insertOptlist*(chain: ptr COptlist, optlist: COptlist): cint
+                    {.importc: "coap_insert_optlist".}
+ 
 proc newOptlist*(number: uint16, length: csize_t, data: ptr uint8): COptlist
                  {.importc: "coap_new_optlist".}
 

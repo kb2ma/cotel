@@ -6,7 +6,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import libcoap, posix, nativesockets
-import logging
+import json, logging, parseutils
 
 type
   CoMsg* = object
@@ -45,8 +45,9 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   netChan.send( CoMsg(req: "response.payload", payload: dataStr) )
 
 
-proc sendMessage(ctx: CContext) =
+proc sendMessage(ctx: CContext, jsonStr: string) =
   ## Send a message to exercise client flow with a server
+  let reqJson = parseJson(jsonStr)
 
   # init server address/port
   let address = create(CSockAddr)
@@ -67,25 +68,50 @@ proc sendMessage(ctx: CContext) =
     return
 
   # init PDU, including type and code
-  var pdu = initPdu(COAP_MESSAGE_CON, COAP_REQUEST_GET.uint8, 1000'u16,
+  var msgType: uint8
+  if reqJson["msgType"].getStr() == "CON":
+    msgType = COAP_MESSAGE_CON
+  else:
+    msgType = COAP_MESSAGE_NON
+
+  var pdu = initPdu(msgType, COAP_REQUEST_GET.uint8, 1000'u16,
                     maxSessionPduSize(session))
   if pdu == nil:
     log.log(lvlError, "Can't create client PDU")
     releaseSession(session)
     return
 
-  # add Uri-Path option
-  var optlist = newOptlist(COAP_OPTION_URI_PATH, 4.csize_t, cast[ptr uint8]("time"))
-  if optlist == nil:
+  # add Uri-Path options
+  let uriPath = reqJson["uriPath"].getStr()
+  var pos = 0
+  var chain: COptlist
+
+  while pos < uriPath.len:
+    var token: string
+    let plen = parseUntil(uriPath, token, '/', pos)
+    #echo("start pos: ", pos, ", token: ", token, " of len ", plen)
+    if plen > 0:
+      let optlist = newOptlist(COAP_OPTION_URI_PATH, token.len.csize_t,
+                               cast[ptr uint8](token.cstring))
+      if optlist == nil:
+        log.log(lvlError, "Can't create option list")
+        return
+      if insertOptlist(addr chain, optlist) == 0:
+        log.log(lvlError, "Can't add to option chain")
+        return
+    pos = pos + plen + 1
+
+  # Path may just be "/". No PDU option in that case.
+  if chain == nil and uriPath != "/":
     log.log(lvlError, "Can't create option list")
     return
-  if addOptlistPdu(pdu, addr(optlist)) == 0:
-    #error("Can't create option list")
-    deleteOptlist(optlist)
+  if chain != nil and addOptlistPdu(pdu, addr chain) == 0:
+    log.log(lvlError, "Can't create option list")
+    deleteOptlist(chain)
     deletePdu(pdu)
     releaseSession(session)
     return
-  deleteOptlist(optlist)
+  deleteOptlist(chain)
 
   # send
   if send(session, pdu) == COAP_INVALID_TXID:
@@ -127,7 +153,7 @@ proc netLoop*(serverPort: int) =
     if msgTuple.dataAvailable:
       case msgTuple.msg.req
       of "send_msg":
-        send_message(ctx)
+        send_message(ctx, msgTuple.msg.payload)
       of "quit":
         break
       else:
