@@ -3,22 +3,25 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import parsecfg, std/strutils
+import parsetoml
+
+const
+  SERVER_PORT_DEFAULT = 5683
 
 type
   CotelConf* = object
     serverPort*: int
 
 proc readConfFile*(confName: string): CotelConf =
-  if confName == "":
-    return CotelConf(serverPort: 5683)
+  ## Raises IOError if can't read file
 
-  var dict = loadConfig(confName)
-  result = CotelConf()
-  let portStr = dict.getSectionValue("Server", "port")
-  try:
-    result.serverPort = parseInt(portStr)
-  except ValueError:
-    if portStr != "":
-      echo("Error reading Server port; using default")
-    result.serverPort = 5683
+  # Build default config, and replace with values from conf file
+  result = CotelConf(serverPort: SERVER_PORT_DEFAULT)
+  if confName == "":
+    return result
+
+  let toml = parseFile(confName)
+
+  let tServer = toml.getOrDefault("Server")
+  if tServer != nil:
+    result.serverPort = getInt(tServer.getOrDefault("port"), SERVER_PORT_DEFAULT)
