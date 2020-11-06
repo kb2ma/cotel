@@ -7,19 +7,9 @@
 
 import libcoap, posix, nativesockets
 import json, logging, parseutils
-
-type
-  CoMsg* = object
-    ## A REST-like message for use in a channel with the enclosing context
-    req*: string
-    payload*: string
-
-var
-  netChan*: Channel[CoMsg]
-  ## Communication channel from conet to enclosing context
-  ctxChan*: Channel[CoMsg]
-  ## Communication channel from enclosing context to conet
-  log {.threadvar.}: FileLogger
+import conet_ctx
+# Provides the core context data for conet module users to share
+export conet_ctx
 
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -35,7 +25,7 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
                     received: CPdu, id: CTxid) {.exportc: "hnd_response",
                     noconv.} =
   ## client response handler
-  #log.log(lvlDebug, "Response received")
+  #oplog.log(lvlDebug, "Response received")
   var dataLen: csize_t
   var dataPtr: ptr uint8
   discard getData(received, addr dataLen, addr dataPtr)
@@ -59,13 +49,13 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
     address.`addr`.sin = cast[SockAddr_in](info.ai_addr[])
     freeaddrinfo(info)
   except OSError:
-    log.log(lvlError, "Can't resolve server address")
+    oplog.log(lvlError, "Can't resolve server address")
     return
 
   #init session
   var session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
   if session == nil:
-    log.log(lvlError, "Can't create client session")
+    oplog.log(lvlError, "Can't create client session")
     return
 
   # init PDU, including type and code
@@ -78,7 +68,7 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
   var pdu = initPdu(msgType, COAP_REQUEST_GET.uint8, 1000'u16,
                     maxSessionPduSize(session))
   if pdu == nil:
-    log.log(lvlError, "Can't create client PDU")
+    oplog.log(lvlError, "Can't create client PDU")
     releaseSession(session)
     return
 
@@ -95,19 +85,19 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
       let optlist = newOptlist(COAP_OPTION_URI_PATH, token.len.csize_t,
                                cast[ptr uint8](token.cstring))
       if optlist == nil:
-        log.log(lvlError, "Can't create option list")
+        oplog.log(lvlError, "Can't create option list")
         return
       if insertOptlist(addr chain, optlist) == 0:
-        log.log(lvlError, "Can't add to option chain")
+        oplog.log(lvlError, "Can't add to option chain")
         return
     pos = pos + plen + 1
 
   # Path may just be "/". No PDU option in that case.
   if chain == nil and uriPath != "/":
-    log.log(lvlError, "Can't create option list")
+    oplog.log(lvlError, "Can't create option list")
     return
   if chain != nil and addOptlistPdu(pdu, addr chain) == 0:
-    log.log(lvlError, "Can't create option list")
+    oplog.log(lvlError, "Can't create option list")
     deleteOptlist(chain)
     deletePdu(pdu)
     releaseSession(session)
@@ -121,7 +111,7 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
 
 proc netLoop*(serverPort: int) =
   ## Setup server and run event loop
-  log = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
+  oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   open(netChan)
   open(ctxChan)
 
@@ -136,7 +126,7 @@ proc netLoop*(serverPort: int) =
 
   discard newEndpoint(ctx, address, COAP_PROTO_UDP)
 
-  log.log(lvlInfo, "Cotel networking started on port ",
+  oplog.log(lvlInfo, "Cotel networking started on port ",
           posix.ntohs(address.`addr`.sin.sin_port))
 
   # Establish server resources and request handlers, and also the client
@@ -158,8 +148,8 @@ proc netLoop*(serverPort: int) =
       of "quit":
         break
       else:
-        log.log(lvlError, "msg not understood: " & msgTuple.msg.req)
+        oplog.log(lvlError, "msg not understood: " & msgTuple.msg.req)
 
   if ctx != nil:
     freeContext(ctx)
-  log.log(lvlInfo, "Exiting net gracefully")
+  oplog.log(lvlInfo, "Exiting net gracefully")

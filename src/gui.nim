@@ -6,7 +6,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import nimx / [ segmented_control, text_field, timer, view, window ]
-import tables, threadpool, parseOpt
+import logging, tables, threadpool, parseOpt
 import conet, gui_util
 
 # Disables these warnings for gui_... module imports above. The modules actually
@@ -106,6 +106,7 @@ runApplication:
     of cmdArgument:
       echo("Argument ", p.key, " not understood")
 
+  oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
   let conf = readConfFile(confName)
 
   startApplication(conf)
