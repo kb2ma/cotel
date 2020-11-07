@@ -124,6 +124,9 @@ proc registerResponseHandler*(context: CContext, handler: CResponseHandler)
 
 proc send*(session: CSession, pdu: CPdu): CTxid {.importc: "coap_send".}
 
+proc setContextPsk*(context: CContext, hint: cstring, key: ptr uint8,
+                    key_len: csize_t): cint {.importc: "coap_context_set_psk".}
+
 # coap_session.h
 proc freeEndpoint*(ep: CEndpoint) {.importc: "coap_free_endpoint".}
 

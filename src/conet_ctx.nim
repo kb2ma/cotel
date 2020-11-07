@@ -13,6 +13,16 @@ type
     req*: string
     payload*: string
 
+  SecurityMode* = enum
+    SECURITY_MODE_NOSEC,
+    SECURITY_MODE_PSK
+
+  CotelConf* = ref object
+    ## Configuration data for Cotel app
+    serverPort*: int
+    securityMode*: SecurityMode
+    pskKey*: seq[char]
+
 var
   netChan*: Channel[CoMsg]
   ## Communication channel from conet to enclosing context

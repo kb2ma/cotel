@@ -109,7 +109,7 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
     deletePdu(pdu)
 
 
-proc netLoop*(serverPort: int) =
+proc netLoop*(conf: CotelConf) =
   ## Setup server and run event loop
   oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   open(netChan)
@@ -122,11 +122,25 @@ proc netLoop*(serverPort: int) =
   var address = create(CSockAddr)
   initAddress(address)
   address.`addr`.sin.sin_family = Domain.AF_INET.cushort
-  address.`addr`.sin.sin_port = posix.htons(serverPort.uint16)
+  address.`addr`.sin.sin_port = posix.htons(conf.serverPort.uint16)
 
-  discard newEndpoint(ctx, address, COAP_PROTO_UDP)
+  var proto: CProto
+  var secMode: string
+  case conf.securityMode
+  of SECURITY_MODE_PSK:
+    if setContextPsk(ctx, "", cast[ptr uint8](addr conf.pskKey[0]),
+                     conf.pskKey.len.csize_t) == 0:
+      oplog.log(lvlError, "Can't set context PSK")
+      return
+    proto = COAP_PROTO_DTLS
+    secMode = "PSK"
+  of SECURITY_MODE_NOSEC:
+    proto = COAP_PROTO_UDP
+    secMode = "NoSec"
+    
+  discard newEndpoint(ctx, address, proto)
 
-  oplog.log(lvlInfo, "Cotel networking started on port ",
+  oplog.log(lvlInfo, "Cotel networking ", secMode, " started on port ",
           posix.ntohs(address.`addr`.sin.sin_port))
 
   # Establish server resources and request handlers, and also the client

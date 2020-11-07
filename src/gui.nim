@@ -65,6 +65,11 @@ proc onSelectView(wnd: Window, scName: string) =
 
 
 proc startApplication(conf: CotelConf) =
+  # Initialize state from configuraton
+  serverState.securityMode = conf.securityMode
+  serverState.port = conf.serverPort
+
+  # Initialize UI
   let wnd = newWindow(newRect(40, 40, 800, 600))
   wnd.title = "Cotel"
   let headerView = View.new(newRect(0, 0, wnd.bounds.width, 30))
@@ -82,7 +87,7 @@ proc startApplication(conf: CotelConf) =
   discard newTimer(0.5, true, checkChan)
 
   # Start network I/O (see conet.nim)
-  spawn netLoop(conf.serverPort)
+  spawn netLoop(conf)
 
   onSelectView(wnd, "Client")
 

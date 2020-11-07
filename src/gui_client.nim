@@ -11,6 +11,7 @@ type
   ClientView* = ref object of View
     respText: FormattedText
   ClientState* = ref object
+    # Data useful for management of CoAP client view
     view*: ClientView
 
 proc onChanMsg*(state: ClientState, msg: CoMsg) =
@@ -25,7 +26,7 @@ method init*(v: ClientView, r: Rect) =
   procCall v.View.init(r)
 
   # y-coordinate for current row of UI
-  var rowY = 10.Coord
+  var rowY = 20.Coord
 
   let portLabel = newLabel(newRect(20, rowY, 100, 20))
   let portLabelText = newFormattedText("Port:")

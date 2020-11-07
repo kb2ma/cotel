@@ -6,18 +6,8 @@
 import base64, logging, parsetoml
 import conet_ctx
 
-type
-  SecurityMode* = enum
-    SECURITY_MODE_NOSEC,
-    SECURITY_MODE_PSK
-
-  CotelConf* = ref object
-    serverPort*: int
-    securityMode*: SecurityMode
-    pskKey*: seq[char]
-
-
 proc readConfFile*(confName: string): CotelConf =
+  ## Builds configuration object from entries in configuration file.
   ## confName must not be empty!
   ## Raises IOError if can't read file.
   ## Raises ValueError if can't read a section/key.
@@ -33,7 +23,7 @@ proc readConfFile*(confName: string): CotelConf =
   # Security section
   let tSec = toml["Security"]
 
-  let secMode = getStr(tsec["security_mode"])
+  let secMode = getStr(tsec["mode"])
   case secMode
   of "NoSec":
     result.securityMode = SECURITY_MODE_NOSEC
@@ -42,6 +32,7 @@ proc readConfFile*(confName: string): CotelConf =
   else:
     raise newException(ValueError, "security_mode not understood: " & secMode)
 
+  # psk_key is a base64 encoded char/byte array
   result.pskKey = cast[seq[char]](decode(getStr(tsec["psk_key"])))
 
   oplog.log(lvlInfo, "Conf file read OK")
