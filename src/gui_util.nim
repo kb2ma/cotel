@@ -3,29 +3,45 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import logging, parsetoml
+import base64, logging, parsetoml
 import conet_ctx
 
-const
-  SERVER_PORT_DEFAULT = 5683
-
 type
-  CotelConf* = object
+  SecurityMode* = enum
+    SECURITY_MODE_NOSEC,
+    SECURITY_MODE_PSK
+
+  CotelConf* = ref object
     serverPort*: int
+    securityMode*: SecurityMode
+    pskKey*: seq[char]
+
 
 proc readConfFile*(confName: string): CotelConf =
-  ## Raises IOError if can't read file
+  ## confName must not be empty!
+  ## Raises IOError if can't read file.
+  ## Raises ValueError if can't read a section/key.
 
-  # Build default config, and replace with values from conf file
-  result = CotelConf(serverPort: SERVER_PORT_DEFAULT)
-  if confName == "":
-    oplog.log(lvlInfo, "Using default configuration")
-    return result
+  # Build conf object with values from conf file, or defaults.
+  result = CotelConf()
 
   let toml = parseFile(confName)
 
-  let tServer = toml.getOrDefault("Server")
-  if tServer != nil:
-    result.serverPort = getInt(tServer.getOrDefault("port"), SERVER_PORT_DEFAULT)
+  # Server section
+  result.serverPort = getInt(toml["Server"]["port"])
 
-  oplog.log(lvlInfo, "Read conf file: " & confName)
+  # Security section
+  let tSec = toml["Security"]
+
+  let secMode = getStr(tsec["security_mode"])
+  case secMode
+  of "NoSec":
+    result.securityMode = SECURITY_MODE_NOSEC
+  of "PSK":
+    result.securityMode = SECURITY_MODE_PSK
+  else:
+    raise newException(ValueError, "security_mode not understood: " & secMode)
+
+  result.pskKey = cast[seq[char]](decode(getStr(tsec["psk_key"])))
+
+  oplog.log(lvlInfo, "Conf file read OK")

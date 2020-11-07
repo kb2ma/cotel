@@ -106,7 +106,13 @@ runApplication:
     of cmdArgument:
       echo("Argument ", p.key, " not understood")
 
-  oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
-  let conf = readConfFile(confName)
-
-  startApplication(conf)
+  if confName == "":
+    echo("Must provide configuration file")
+    quit(QuitFailure)
+  else:
+    oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
+    try:
+      startApplication(readConfFile(confName))
+    except:
+      echo("Configuration file error: ", getCurrentExceptionMsg())
+      quit(QuitFailure)
