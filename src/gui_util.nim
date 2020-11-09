@@ -6,6 +6,14 @@
 import base64, logging, parsetoml
 import conet_ctx
 
+type
+  CotelConf* = ref object
+    ## Configuration data for Cotel app
+    serverPort*: int
+    securityMode*: SecurityMode
+    pskKey*: seq[char]
+    pskClientId*: string
+
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
   ## confName must not be empty!
@@ -34,5 +42,9 @@ proc readConfFile*(confName: string): CotelConf =
 
   # psk_key is a base64 encoded char/byte array
   result.pskKey = cast[seq[char]](decode(getStr(tsec["psk_key"])))
+
+  # client_id is a text string. Client requests use the same PSK key as the
+  # local server.
+  result.pskClientId = getStr(tSec["client_id"])
 
   oplog.log(lvlInfo, "Conf file read OK")

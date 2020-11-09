@@ -89,6 +89,7 @@ type
     local_if*: CSockAddr
     hh*: CHashHandle
     addr_info*: CAddrTuple
+    ifindex*: cint
 
   CPdu* = ptr object
     ## coap_pdu_t
@@ -115,11 +116,11 @@ type
 proc freeContext*(context: CContext) {.importc: "coap_free_context".}
 
 proc newContext*(listen_addr: ptr CSockAddr): CContext
-     {.importc: "coap_new_context".}
+                {.importc: "coap_new_context".}
 
 # Must include header pragma because library function is 'static inline'.
 proc registerResponseHandler*(context: CContext, handler: CResponseHandler)
-                              {.header: "coap2/net.h",
+                             {.header: "coap2/net.h",
                                importc: "coap_register_response_handler".}
 
 proc send*(session: CSession, pdu: CPdu): CTxid {.importc: "coap_send".}
@@ -128,6 +129,10 @@ proc setContextPsk*(context: CContext, hint: cstring, key: ptr uint8,
                     key_len: csize_t): cint {.importc: "coap_context_set_psk".}
 
 # coap_session.h
+proc findSession*(context: CContext, remote: ptr CSockAddr,
+                  if_index: cint): CSession
+                 {.importc: "coap_session_get_by_peer".}
+
 proc freeEndpoint*(ep: CEndpoint) {.importc: "coap_free_endpoint".}
 
 proc maxSessionPduSize*(session: CSession): csize_t
@@ -135,7 +140,13 @@ proc maxSessionPduSize*(session: CSession): csize_t
 
 proc newClientSession*(context: CContext, local_addr: ptr CSockAddr,
                        server_addr: ptr CSockAddr, proto: CProto): CSession
-                       {.importc: "coap_new_client_session".}
+                      {.importc: "coap_new_client_session".}
+
+proc newClientSessionPsk*(context: CContext, local_addr: ptr CSockAddr,
+                          server_addr: ptr CSockAddr, proto: CProto,
+                          identity: cstring, key: ptr uint8,
+                          key_len: uint): CSession
+                         {.importc: "coap_new_client_session_psk".}
 
 proc newEndpoint*(context: CContext, listen_addr: ptr CSockAddr,
                  proto: CProto): CEndpoint {.importc: "coap_new_endpoint".}
@@ -150,7 +161,7 @@ proc initResource*(uri_path: CStringConst, flags: cint): CResource
                   {.importc: "coap_resource_init".}
 
 proc registerHandler*(resource: CResource, `method`: CRequestCode,
-                     handler: CRequestHandler)
+                      handler: CRequestHandler)
                      {.importc: "coap_register_handler".}
 
 # pdu.h
@@ -163,22 +174,22 @@ proc getData*(pdu: CPdu, len: ptr csize_t, data: ptr ptr uint8): cint
              {.importc: "coap_get_data".}
 
 proc initPdu*(`type`: uint8, code: uint8, txid: uint16 = 0, size: csize_t): CPdu
-              {.importc: "coap_pdu_init".}
+             {.importc: "coap_pdu_init".}
   ## 'type' is one of the COAP_MESSAGE... constants
   ## 'code' param value is CRequestCode for a request
 
 # option.h
 proc addOptlistPdu*(pdu: CPdu, chain: ptr COptlist): cint
-                    {.importc: "coap_add_optlist_pdu".}
+                   {.importc: "coap_add_optlist_pdu".}
 
 proc deleteOptlist*(list: COptlist) {.importc: "coap_delete_optlist".}
   ## Must delete optlist created by newOptlist
 
 proc insertOptlist*(chain: ptr COptlist, optlist: COptlist): cint
-                    {.importc: "coap_insert_optlist".}
+                   {.importc: "coap_insert_optlist".}
  
 proc newOptlist*(number: uint16, length: csize_t, data: ptr uint8): COptlist
-                 {.importc: "coap_new_optlist".}
+                {.importc: "coap_new_optlist".}
 
 # coap_io.h
 proc processIo*(context: CContext, timeout: uint32): cint

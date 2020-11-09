@@ -86,9 +86,13 @@ proc startApplication(conf: CotelConf) =
   # periodically check for messages from conet channel
   discard newTimer(0.5, true, checkChan)
 
-  # Start network I/O (see conet.nim)
-  spawn netLoop(conf)
+  # Configure CoAP networking and spawn in a new thread
+  let conetState = ConetState(serverPort: conf.serverPort,
+                              securityMode: conf.securityMode,
+                              pskKey: conf.pskKey, pskClientId: conf.pskClientId)
+  spawn netLoop(conetState)
 
+  # Show client page initially
   onSelectView(wnd, "Client")
 
 

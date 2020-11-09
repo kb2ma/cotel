@@ -1,4 +1,4 @@
-## Cotel networking
+## Conet: Cotel networking
 ##
 ## Runs libcoap server and client
 ##
@@ -10,6 +10,14 @@ import json, logging, parseutils
 import conet_ctx
 # Provides the core context data for conet module users to share
 export conet_ctx
+
+type
+  ConetState* = ref object
+    ## State for Conet; intended only for internal use
+    securityMode*: SecurityMode
+    serverPort*: int
+    pskKey*: seq[char]
+    pskClientId*: string
 
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -35,8 +43,8 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   netChan.send( CoMsg(req: "response.payload", payload: dataStr) )
 
 
-proc sendMessage(ctx: CContext, jsonStr: string) =
-  ## Send a message to exercise client flow with a server
+proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
+  ## Send a message to exercise client flow with a server.
   let reqJson = parseJson(jsonStr)
 
   # init server address/port
@@ -46,6 +54,7 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
     let port = reqJson["remPort"].getInt()
     let info = getAddrInfo("127.0.0.1", port.Port, Domain.AF_INET,
                            SockType.SOCK_DGRAM, Protocol.IPPROTO_UDP)
+    address.size = sizeof(SockAddr_in).SockLen
     address.`addr`.sin = cast[SockAddr_in](info.ai_addr[])
     freeaddrinfo(info)
   except OSError:
@@ -53,7 +62,19 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
     return
 
   #init session
-  var session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
+  var session: CSession
+  if getStr(reqJson["proto"]) == "coaps":
+    # Assume libcoap retains PSK session, so look for it. Also assume use of
+    # local interface 0.
+    session = findSession(ctx, address, 0)
+    if session == nil:
+      session = newClientSessionPsk(ctx, nil, address, COAP_PROTO_DTLS,
+                                    state.pskClientId,
+                                    cast[ptr uint8](addr state.pskKey[0]),
+                                    state.pskKey.len.uint)
+  else:
+    # proto must be 'coap'
+    session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
   if session == nil:
     oplog.log(lvlError, "Can't create client session")
     return
@@ -109,7 +130,7 @@ proc sendMessage(ctx: CContext, jsonStr: string) =
     deletePdu(pdu)
 
 
-proc netLoop*(conf: CotelConf) =
+proc netLoop*(state: ConetState) =
   ## Setup server and run event loop
   oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   open(netChan)
@@ -122,14 +143,14 @@ proc netLoop*(conf: CotelConf) =
   var address = create(CSockAddr)
   initAddress(address)
   address.`addr`.sin.sin_family = Domain.AF_INET.cushort
-  address.`addr`.sin.sin_port = posix.htons(conf.serverPort.uint16)
+  address.`addr`.sin.sin_port = posix.htons(state.serverPort.uint16)
 
   var proto: CProto
   var secMode: string
-  case conf.securityMode
+  case state.securityMode
   of SECURITY_MODE_PSK:
-    if setContextPsk(ctx, "", cast[ptr uint8](addr conf.pskKey[0]),
-                     conf.pskKey.len.csize_t) == 0:
+    if setContextPsk(ctx, "", cast[ptr uint8](addr state.pskKey[0]),
+                     state.pskKey.len.csize_t) == 0:
       oplog.log(lvlError, "Can't set context PSK")
       return
     proto = COAP_PROTO_DTLS
@@ -137,7 +158,7 @@ proc netLoop*(conf: CotelConf) =
   of SECURITY_MODE_NOSEC:
     proto = COAP_PROTO_UDP
     secMode = "NoSec"
-    
+
   discard newEndpoint(ctx, address, proto)
 
   oplog.log(lvlInfo, "Cotel networking ", secMode, " started on port ",
@@ -158,7 +179,7 @@ proc netLoop*(conf: CotelConf) =
     if msgTuple.dataAvailable:
       case msgTuple.msg.req
       of "send_msg":
-        send_message(ctx, msgTuple.msg.payload)
+        send_message(ctx, state, msgTuple.msg.payload)
       of "quit":
         break
       else:

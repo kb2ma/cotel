@@ -28,13 +28,23 @@ method init*(v: ClientView, r: Rect) =
   # y-coordinate for current row of UI
   var rowY = 20.Coord
 
-  let portLabel = newLabel(newRect(20, rowY, 100, 20))
+  let remoteLabel = newLabel(newRect(20, rowY, 100, 20))
+  let remoteLabelText = newFormattedText("Remote:")
+  remoteLabelText.horizontalAlignment = haRight
+  remoteLabel.formattedText = remoteLabelText
+  v.addSubview(remoteLabel)
+
+  let protoDd = PopupButton.new(newRect(140, rowY, 80, 20))
+  protoDd.items = @["coap", "coaps"]
+  v.addSubview(protoDd)
+
+  let portLabel = newLabel(newRect(240, rowY, 60, 20))
   let portLabelText = newFormattedText("Port:")
   portLabelText.horizontalAlignment = haRight
   portLabel.formattedText = portLabelText
   v.addSubview(portLabel)
 
-  let portTextField = newTextField(newRect(140, rowY, 80, 20))
+  let portTextField = newTextField(newRect(320, rowY, 80, 20))
   portTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   portTextField.text = "5683"
   v.addSubview(portTextField)
@@ -70,7 +80,7 @@ method init*(v: ClientView, r: Rect) =
   button.onAction do():
     var jNode = %*
       { "msgType": typeDd.selectedItem(), "uriPath": pathTextField.text,
-        "remPort": parseInt(portTextField.text) }
+        "proto": protoDd.selectedItem, "remPort": parseInt(portTextField.text) }
 
     onSendClicked(jNode)
   v.addSubview(button)
