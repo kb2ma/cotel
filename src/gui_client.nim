@@ -29,7 +29,7 @@ method init*(v: ClientView, r: Rect) =
   var rowY = 20.Coord
 
   let remoteLabel = newLabel(newRect(20, rowY, 100, 20))
-  let remoteLabelText = newFormattedText("Remote:")
+  let remoteLabelText = newFormattedText("Protocol:")
   remoteLabelText.horizontalAlignment = haRight
   remoteLabel.formattedText = remoteLabelText
   v.addSubview(remoteLabel)
@@ -48,6 +48,18 @@ method init*(v: ClientView, r: Rect) =
   portTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   portTextField.text = "5683"
   v.addSubview(portTextField)
+
+  rowY += 30
+
+  let hostLabel = newLabel(newRect(20, rowY, 100, 20))
+  let hostLabelText = newFormattedText("Host:")
+  hostLabelText.horizontalAlignment = haRight
+  hostLabel.formattedText = hostLabelText
+  v.addSubview(hostLabel)
+
+  let hostTextField = newTextField(newRect(140, rowY, 300, 20))
+  hostTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
+  v.addSubview(hostTextField)
 
   rowY += 30
 
@@ -75,17 +87,18 @@ method init*(v: ClientView, r: Rect) =
 
   rowY += 30
 
-  let button = newButton(newRect(20, rowY, 100, 22))
+  let button = newButton(newRect(20, rowY, 100, 30))
   button.title = "Send Msg"
   button.onAction do():
     var jNode = %*
       { "msgType": typeDd.selectedItem(), "uriPath": pathTextField.text,
-        "proto": protoDd.selectedItem, "remPort": parseInt(portTextField.text) }
+        "proto": protoDd.selectedItem, "remHost": hostTextField.text,
+        "remPort": parseInt(portTextField.text) }
 
     onSendClicked(jNode)
   v.addSubview(button)
 
-  rowY += 30
+  rowY += 35
 
   let respLabel = newLabel(newRect(20, rowY, 100, 20))
   let respLabelText = newFormattedText("Response:")

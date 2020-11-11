@@ -81,17 +81,9 @@ proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
 
   # init server address/port
   let address = create(CSockAddr)
-  initAddress(address)
-  try:
-    let port = reqJson["remPort"].getInt()
-    let info = getAddrInfo("127.0.0.1", port.Port, Domain.AF_INET,
-                           SockType.SOCK_DGRAM, Protocol.IPPROTO_UDP)
-    address.size = sizeof(SockAddr_in).SockLen
-    address.`addr`.sin = cast[SockAddr_in](info.ai_addr[])
-    freeaddrinfo(info)
-  except OSError:
-    oplog.log(lvlError, "Can't resolve server address")
-    return
+  let host = reqJson["remHost"].getStr()
+  let port = reqJson["remPort"].getInt()
+  resolveAddress(ctx, host, $port, address)
 
   #init session
   var session: CSession
