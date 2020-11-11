@@ -44,6 +44,18 @@ type
     COAP_REQUEST_PATCH,
     COAP_REQUEST_IPATCH
 
+  CLogLevel* = enum
+    ## coap_log_t logging levels
+    LOG_EMERG,
+    LOG_ALERT,
+    LOG_CRIT,
+    LOG_ERR,
+    LOG_WARNING,
+    LOG_NOTICE,
+    LOG_INFO,
+    LOG_DEBUG,
+    COAP_LOG_CIPHERS
+
   CSockAddrUnion* {.union} = object
     ## Used only by CSockAddr
     sa*: SockAddr
@@ -109,6 +121,8 @@ type
 
   CResponseHandler* = proc (context: CContext, session: CSession, sent: CPdu,
                             received: CPdu, id: CTxid) {.noconv.}
+
+  CLogHandler* = proc (level: CLogLevel, message: cstring) {.noconv.}
 
 
 {.push dynlib: libName.}
@@ -201,4 +215,9 @@ proc initAddress*(address: ptr CSockAddr) {.importc: "coap_address_init".}
 # str.h
 proc makeStringConst*(str: cstring): CStringConst
                      {.importc: "coap_make_str_const".}
+
+# coap_debug.h
+proc setLogHandler*(handler: CLogHandler) {.importc: "coap_set_log_handler".}
+
+proc setLogLevel*(level: CLogLevel) {.importc: "coap_set_log_level".}
 {.pop.}

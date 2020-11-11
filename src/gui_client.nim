@@ -87,16 +87,36 @@ method init*(v: ClientView, r: Rect) =
 
   rowY += 30
 
+  # forward declare err text for use in button callback
+  var errTextLabel: TextField
+  var errText: FormattedText
+  
   let button = newButton(newRect(20, rowY, 100, 30))
   button.title = "Send Msg"
   button.onAction do():
+    # clear response
+    v.respText.text = ""
+    # verify input
+    errText.text = ""
+    if portTextField.text == "":
+      errText.text = "Port can't be blank"
+      errText.setTextColorInRange(0, len(errText.text), newColor(1, 0, 0))
+      return
+
     var jNode = %*
       { "msgType": typeDd.selectedItem(), "uriPath": pathTextField.text,
         "proto": protoDd.selectedItem, "remHost": hostTextField.text,
         "remPort": parseInt(portTextField.text) }
-
     onSendClicked(jNode)
+
   v.addSubview(button)
+
+  # error text -- blank unless error
+  # Move down just a little due to send button height
+  errTextLabel = newLabel(newRect(140, rowY + 5, 500, 80))
+  errText = newFormattedText("")
+  errTextLabel.formattedText = errText
+  v.addSubview(errTextLabel)
 
   rowY += 35
 

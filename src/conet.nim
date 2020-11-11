@@ -6,7 +6,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import libcoap, posix, nativesockets
-import json, logging, parseutils
+import json, logging, parseutils, strformat, strutils
 import conet_ctx
 # Provides the core context data for conet module users to share
 export conet_ctx
@@ -31,17 +31,37 @@ proc handleHi(context: CContext, resource: CResource, session: CSession,
   netChan.send( CoMsg(req: "request.log", payload: remote & " GET /hi") )
 
 proc handleResponse(context: CContext, session: CSession, sent: CPdu,
-                    received: CPdu, id: CTxid) {.exportc: "hnd_response",
-                    noconv.} =
+                    received: CPdu, id: CTxid)
+                    {.exportc: "hnd_response", noconv.} =
   ## client response handler
   #oplog.log(lvlDebug, "Response received")
   var dataLen: csize_t
   var dataPtr: ptr uint8
   discard getData(received, addr dataLen, addr dataPtr)
 
+  let codeStr = "[code $#.$#]\n" % [fmt"{received.code shr 5}",
+                                    fmt"{received.code and 0x1F:>02}"]
+
   var dataStr = newString(dataLen)
   copyMem(addr dataStr[0], dataPtr, dataLen)
-  netChan.send( CoMsg(req: "response.payload", payload: dataStr) )
+  netChan.send( CoMsg(req: "response.payload", payload: codeStr & dataStr) )
+
+proc handleCoapLog(level: CLogLevel, message: cstring)
+                   {.exportc: "hnd_log", noconv.} =
+  var lvl: Level
+  case level
+  of LOG_EMERG, LOG_ALERT, LOG_CRIT, LOG_ERR:
+    lvl = lvlError
+  of LOG_WARNING:
+    lvl = lvlWarn
+  of LOG_NOTICE:
+    lvl = lvlNotice
+  of LOG_INFO:
+    lvl = lvlInfo
+  of LOG_DEBUG, COAP_LOG_CIPHERS:
+    lvl = lvlDebug
+
+  oplog.log(lvl, message)
 
 proc resolveAddress(ctx: CContext, host: string, port: string,
                     sockAddr: ptr CSockAddr) =
@@ -159,6 +179,8 @@ proc netLoop*(state: ConetState) =
   oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   open(netChan)
   open(ctxChan)
+  setLogLevel(LOG_DEBUG)
+  setLogHandler(handleCoapLog)
 
   # init context, listen port/endpoint
   var ctx = newContext(nil)
