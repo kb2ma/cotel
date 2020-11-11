@@ -67,6 +67,7 @@ proc onSelectView(wnd: Window, scName: string) =
 proc startApplication(conf: CotelConf) =
   # Initialize state from configuraton
   serverState.securityMode = conf.securityMode
+  serverState.listenAddr = conf.serverAddr
   serverState.port = conf.serverPort
 
   # Initialize UI
@@ -87,7 +88,8 @@ proc startApplication(conf: CotelConf) =
   discard newTimer(0.5, true, checkChan)
 
   # Configure CoAP networking and spawn in a new thread
-  let conetState = ConetState(serverPort: conf.serverPort,
+  let conetState = ConetState(listenAddr: conf.serverAddr,
+                              serverPort: conf.serverPort,
                               securityMode: conf.securityMode,
                               pskKey: conf.pskKey, pskClientId: conf.pskClientId)
   spawn netLoop(conetState)

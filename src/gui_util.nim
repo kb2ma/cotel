@@ -9,6 +9,7 @@ import conet_ctx
 type
   CotelConf* = ref object
     ## Configuration data for Cotel app
+    serverAddr*: string
     serverPort*: int
     securityMode*: SecurityMode
     pskKey*: seq[char]
@@ -26,7 +27,10 @@ proc readConfFile*(confName: string): CotelConf =
   let toml = parseFile(confName)
 
   # Server section
-  result.serverPort = getInt(toml["Server"]["port"])
+  let tServ = toml["Server"]
+  
+  result.serverAddr = getStr(tServ["listen_addr"])
+  result.serverPort = getInt(tServ["port"])
 
   # Security section
   let tSec = toml["Security"]

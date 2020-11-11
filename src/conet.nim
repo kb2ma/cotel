@@ -15,6 +15,7 @@ type
   ConetState* = ref object
     ## State for Conet; intended only for internal use
     securityMode*: SecurityMode
+    listenAddr*: string
     serverPort*: int
     pskKey*: seq[char]
     pskClientId*: string
@@ -42,6 +43,37 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   copyMem(addr dataStr[0], dataPtr, dataLen)
   netChan.send( CoMsg(req: "response.payload", payload: dataStr) )
 
+proc resolveAddress(ctx: CContext, host: string, port: string,
+                    sockAddr: ptr CSockAddr) =
+  ## Looks up network address info. Initializes and updates 'sockAddr'.
+  ## Prefers IPv6 address, although the format of the host address should
+  ## suggest the IP version.
+
+  var hints: AddrInfo
+  hints.ai_family = posix.AF_UNSPEC
+  hints.ai_socktype = posix.SOCK_DGRAM
+  hints.ai_flags = posix.AI_NUMERICHOST
+  # Use 'info' to iterate linked list, and retain first element in 'firstInfo'.
+  var info, firstInfo: ptr AddrInfo
+
+  initAddress(sockAddr)
+  let res = getaddrinfo(host, port, addr hints, firstInfo)
+  info = firstInfo
+
+  while info != nil:
+    case info.ai_family
+    of posix.AF_INET6:
+      sockAddr.size = sizeof(SockAddr_in6).SockLen
+      copyMem(addr sockAddr.`addr`.sin6, info.ai_addr, sockAddr.size)
+      break
+    of posix.AF_INET:
+      sockAddr.size = sizeof(SockAddr_in).SockLen
+      copyMem(addr sockAddr.`addr`.sin, info.ai_addr, sockAddr.size)
+    else:
+      discard
+    info = info.ai_next
+
+  freeaddrinfo(firstInfo)
 
 proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
   ## Send a message to exercise client flow with a server.
@@ -141,9 +173,7 @@ proc netLoop*(state: ConetState) =
 
   # CoAP server setup
   var address = create(CSockAddr)
-  initAddress(address)
-  address.`addr`.sin.sin_family = Domain.AF_INET.cushort
-  address.`addr`.sin.sin_port = posix.htons(state.serverPort.uint16)
+  resolveAddress(ctx, state.listenAddr, $state.serverPort, address)
 
   var proto: CProto
   var secMode: string
@@ -161,8 +191,8 @@ proc netLoop*(state: ConetState) =
 
   discard newEndpoint(ctx, address, proto)
 
-  oplog.log(lvlInfo, "Cotel networking ", secMode, " started on port ",
-          posix.ntohs(address.`addr`.sin.sin_port))
+  oplog.log(lvlInfo, "Cotel networking ", secMode, " listening on ",
+            state.listenAddr, ":", $state.serverPort)
 
   # Establish server resources and request handlers, and also the client
   # response handler.

@@ -16,6 +16,7 @@ type
     # Data useful for management of CoAP server view
     view*: ServerView
     securityMode*: SecurityMode
+    listenAddr*: string
     port*: int
     inText*: string
 
@@ -31,7 +32,7 @@ proc update*(v: ServerView, state: ServerState) =
     v.localText.text = "NoSec"
   of SECURITY_MODE_PSK:
     v.localText.text = "PSK"
-  v.localText.text = v.localText.text & " on " & $state.port
+  v.localText.text = v.localText.text & " on " & state.listenAddr & ":" & $state.port
 
   v.inText.text = state.inText
 
