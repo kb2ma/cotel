@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Cotel
 Comment=Cotel CoAP Explorer
-Exec=/home/kbee/dev/cotel/share/run/cotelg -c:/home/kbee/dev/cotel/share/run/cotel.conf
+Exec=/home/kbee/dev/cotel/share/run/run.sh
 Icon=/home/kbee/dev/cotel/repo/resources/cotel32.png
 Type=Application
 Encoding=UTF-8
