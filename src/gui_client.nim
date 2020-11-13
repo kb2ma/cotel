@@ -3,8 +3,8 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ button, formatted_text, popup_button, scroll_view, table_view,
-                table_view_cell, text_field, view ]
+import nimx / [ button, font, formatted_text, popup_button, scroll_view,
+                table_view, table_view_cell, text_field, view ]
 import json, os, strutils
 import conet
 
@@ -58,11 +58,19 @@ proc updateLogView*(v: ClientView, isShow: bool) =
   v.logScroll = newScrollView(logTable)
   v.addSubview(v.logScroll)
 
+  # Use smaller font, and use same Font instance for all cells
+  let cellFont = systemFontOfSize(12)
   logTable.numberOfRows = proc: int = v.logLines.len
   logTable.createCell = proc (): TableViewCell =
-      result = newTableViewCell(newLabel(newRect(0, 0, 580, 20)))
+    let label = newLabel(newRect(0, 0, 580, 16))
+    label.font = cellFont
+    result = newTableViewCell(label)
   logTable.configureCell = proc (c: TableViewCell) =
-      TextField(c.subviews[0]).text = v.logLines[c.row]
+    let tf = TextField(c.subviews[0])
+    tf.font = cellFont
+    tf.text = v.logLines[c.row]
+  logTable.heightOfRow = proc (row: int): Coord =
+    result = 16
 
 method init*(v: ClientView, r: Rect) =
   procCall v.View.init(r)
