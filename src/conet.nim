@@ -61,7 +61,8 @@ proc handleCoapLog(level: CLogLevel, message: cstring)
   of LOG_DEBUG, COAP_LOG_CIPHERS:
     lvl = lvlDebug
 
-  oplog.log(lvl, message)
+  # only strip trailing whitespace to avoid extra newline
+  oplog.log(lvl, strip($message, false))
 
 proc resolveAddress(ctx: CContext, host: string, port: string,
                     sockAddr: ptr CSockAddr) =
