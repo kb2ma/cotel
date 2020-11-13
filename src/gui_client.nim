@@ -3,24 +3,66 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ button, formatted_text, popup_button, text_field, view ]
-import json, strutils
+import nimx / [ button, formatted_text, popup_button, scroll_view, table_view,
+                table_view_cell, text_field, view ]
+import json, os, strutils
 import conet
 
 type
   ClientView* = ref object of View
+    state*: ClientState
     respText: FormattedText
+    bottomY: Coord
+      ## y-value for the bottom of the last control in the view, which makes
+      ## it easy to dynamically add another control below it
+    logLabel: TextField
+    logScroll*: ScrollView
+    logPos*: int64
+    logLines*: seq[string]
+      ## log lines collected from 'logFile'
+
   ClientState* = ref object
-    # Data useful for management of CoAP client view
-    view*: ClientView
+    # User context for the state -- the view
+    userCtx*: ClientView
+
 
 proc onChanMsg*(state: ClientState, msg: CoMsg) =
   if msg.req == "response.payload":
-    state.view.respText.text = msg.payload
+    state.userCtx.respText.text = msg.payload
 
-proc onSendClicked(jNode: JsonNode) =
-
+proc onSendClicked(v: ClientView, jNode: JsonNode) =
   ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
+
+proc updateLogView*(v: ClientView, isShow: bool) =
+  ## Show/Hide the log table. Also set up infrastructure to read net.log.
+  ## Assumes view 'logLines' already initialized.
+  if not isShow:
+    if v.logLabel != nil:
+      v.logLabel.removeFromSuperview()
+      v.logScroll.removeFromSuperview()
+      return
+
+  if v.logPos < 0:
+    v.logPos = os.getFileSize("net.log")
+
+  # build log label, list
+  v.logLabel = newLabel(newRect(20, v.bottomY + 30, 100, 20))
+  let labelText = newFormattedText("Log:")
+  labelText.horizontalAlignment = haRight
+  v.logLabel.formattedText = labelText
+  v.addSubview(v.logLabel)
+
+  let logTable = newTableView(newRect(140, v.bottomY + 30, 600, 200))
+  logTable.name = "logTable"
+  #tableView.resizingMask = "rh"
+  v.logScroll = newScrollView(logTable)
+  v.addSubview(v.logScroll)
+
+  logTable.numberOfRows = proc: int = v.logLines.len
+  logTable.createCell = proc (): TableViewCell =
+      result = newTableViewCell(newLabel(newRect(0, 0, 580, 20)))
+  logTable.configureCell = proc (c: TableViewCell) =
+      TextField(c.subviews[0]).text = v.logLines[c.row]
 
 method init*(v: ClientView, r: Rect) =
   procCall v.View.init(r)
@@ -48,6 +90,14 @@ method init*(v: ClientView, r: Rect) =
   portTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   portTextField.text = "5683"
   v.addSubview(portTextField)
+
+  let logSelCbox = newCheckbox(newRect(500, rowY, 60, 16))
+  logSelCbox.title = "Show log"
+  logSelCbox.onAction do():
+    updateLogView(v, logSelCbox.boolValue)
+  v.logPos = -1
+  v.logLines = newSeqOfCap[string](5)
+  v.addSubview(logSelCbox)
 
   rowY += 30
 
@@ -107,7 +157,7 @@ method init*(v: ClientView, r: Rect) =
       { "msgType": typeDd.selectedItem(), "uriPath": pathTextField.text,
         "proto": protoDd.selectedItem, "remHost": hostTextField.text,
         "remPort": parseInt(portTextField.text) }
-    onSendClicked(jNode)
+    onSendClicked(v, jNode)
 
   v.addSubview(button)
 
@@ -131,5 +181,7 @@ method init*(v: ClientView, r: Rect) =
   respTextLabel.formattedText = v.respText
   v.respText.verticalAlignment = vaTop
   v.addSubview(respTextLabel)
+
+  v.bottomY = rowY.Coord + 80
 
 registerClass(ClientView)

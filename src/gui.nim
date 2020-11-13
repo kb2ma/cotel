@@ -5,7 +5,8 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ segmented_control, text_field, timer, view, window ]
+import nimx / [ button, segmented_control, table_view, text_field, timer, view,
+                window ]
 import logging, tables, threadpool, parseOpt
 import conet, gui_util
 
@@ -17,18 +18,37 @@ import conet, gui_util
 import gui_client, gui_server
 
 var
-  clientState = ClientState(view: nil)
+  clientState = ClientState(userCtx: nil)
   serverState = ServerState(view: nil, inText: "")
   activeName = ""
-    ## name of the active view/state
+    ## name of the active view
 
-proc checkChan() =
-  ## Handle any incoming message from the conet channel
+proc handleTimerTick() =
+  # Handle any incoming message from the conet channel
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
     serverState.onChanMsg(msgTuple.msg)
-    if clientState.view != nil:
+    if clientState.userCtx != nil:
       clientState.onChanMsg(msgTuple.msg)
+
+  if clientState.userCtx != nil:
+    let v = clientState.userCtx
+    if v.logScroll != nil:
+      var f: File
+      discard open(f, "net.log")
+      let pos = f.getFileSize()
+      if pos > v.logPos:
+        f.setFilePos(v.logPos)
+        var lineText: string
+        while true:
+          if not f.readLine(lineText):
+            break
+          v.logLines.add(lineText)
+
+        v.logPos = pos
+        let tv = cast[TableView](v.logScroll.findSubviewWithName("logTable"))
+        tv.reloadData()
+
 
 proc onSelectView(wnd: Window, scName: string) =
   ## Activate/Display the view for the selected name.
@@ -41,8 +61,8 @@ proc onSelectView(wnd: Window, scName: string) =
     activeView = serverState.view
     serverState.view = nil
   of "Client":
-    activeView = clientState.view
-    clientState.view = nil
+    activeView = clientState.userCtx
+    clientState.userCtx = nil
 
   # create/initialize the new view
   let nv = View(newObjectOfClass(scName & "View"))
@@ -54,7 +74,9 @@ proc onSelectView(wnd: Window, scName: string) =
     serverState.view = cast[ServerView](nv)
     serverState.view.update(serverState)
   of "Client":
-    clientState.view = cast[ClientView](nv)
+    let cv = cast[ClientView](nv)
+    clientState.userCtx = cv
+    cv.state = clientState
 
   # display the new view
   if activeName != "":
@@ -85,7 +107,7 @@ proc startApplication(conf: CotelConf) =
   headerView.addSubview(sc)
 
   # periodically check for messages from conet channel
-  discard newTimer(0.5, true, checkChan)
+  discard newTimer(0.5, true, handleTimerTick)
 
   # Configure CoAP networking and spawn in a new thread
   let conetState = ConetState(listenAddr: conf.serverAddr,
