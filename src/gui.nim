@@ -18,7 +18,7 @@ import conet, gui_util
 import gui_client, gui_server
 
 var
-  clientState = ClientState(userCtx: nil)
+  clientState = ClientState(userCtx: nil, showsLog: false)
   serverState = ServerState(view: nil, inText: "")
   activeName = ""
     ## name of the active view
@@ -82,6 +82,8 @@ proc onSelectView(wnd: Window, selName: string) =
     let cv = cast[ClientView](nv)
     clientState.userCtx = cv
     cv.state = clientState
+    if clientState.showsLog:
+      cv.showLogView(wnd.bounds)
 
   # display the new view
   if activeName != "":
@@ -111,7 +113,10 @@ proc startApplication(conf: CotelConf) =
     - "-"
     - "Toggle log":
         if clientState.userCtx != nil:
-          toggleLogView(clientState.userCtx)
+          if clientState.showsLog:
+            hideLogView(clientState.userCtx)
+          else:
+            showLogView(clientState.userCtx, wnd.bounds)
 
   let imgBtn = newImageButton(newRect(10, 4, 32, 32))
   imgBtn.image = imageWithContentsOfFile("menu.png")

@@ -22,8 +22,10 @@ type
       ## log lines collected from 'logFile'
 
   ClientState* = ref object
-    # User context for the state -- the view
     userCtx*: ClientView
+      ## User context for the state -- the view
+    showsLog*: bool
+      ## Show the log in the user context if true
 
 
 proc onChanMsg*(state: ClientState, msg: CoMsg) =
@@ -33,29 +35,25 @@ proc onChanMsg*(state: ClientState, msg: CoMsg) =
 proc onSendClicked(v: ClientView, jNode: JsonNode) =
   ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
 
-proc toggleLogView*(v: ClientView) =
-  ## Show/Hide the log table. Also set up infrastructure to read net.log.
+proc showLogView*(v: ClientView, wndBounds: Rect) =
+  ## Shows the log table, and sets up infrastructure to read net.log as needed.
   ## Assumes view 'logLines' already initialized.
-  if v.logScroll != nil:
-    v.logLabel.removeFromSuperview()
-    v.logLabel = nil
-    v.logScroll.removeFromSuperview()
-    v.logScroll = nil
-    return
+  ## Must provide enclosing window bounds since client view may not have been
+  ## added to the window yet.
 
   if v.logPos < 0:
+    # initialize file position on first use
     v.logPos = os.getFileSize("net.log")
 
   # build log label, list
-  v.logLabel = newLabel(newRect(20, v.window.bounds.height - 220, 100, 20))
+  v.logLabel = newLabel(newRect(20, wndBounds.height - 220, 100, 20))
   let labelText = newFormattedText("Log")
   #labelText.horizontalAlignment = haRight
   v.logLabel.formattedText = labelText
   v.addSubview(v.logLabel)
 
-  let logTable = newTableView(newRect(2, v.window.bounds.height - 200,
-                                      v.window.bounds.width,
-                                      v.window.bounds.height))
+  let logTable = newTableView(newRect(6, wndBounds.height - 200,
+                                      wndBounds.width, wndBounds.height))
   logTable.name = "logTable"
   logTable.autoresizingMask = {afFlexibleWidth}
   v.logScroll = newScrollView(logTable)
@@ -65,15 +63,27 @@ proc toggleLogView*(v: ClientView) =
   let cellFont = systemFontOfSize(12)
   logTable.numberOfRows = proc: int = v.logLines.len
   logTable.createCell = proc (): TableViewCell =
-    let label = newLabel(newRect(0, 0, v.window.bounds.width - 8, 16))
+    let label = newLabel(newRect(0, 0, wndBounds.width - 8, 16))
     label.font = cellFont
     result = newTableViewCell(label)
   logTable.configureCell = proc (c: TableViewCell) =
     let tf = TextField(c.subviews[0])
     tf.font = cellFont
     tf.text = v.logLines[c.row]
+    tf.selectable = true
   logTable.heightOfRow = proc (row: int): Coord =
     result = 16
+  v.state.showsLog = true
+
+proc hideLogView*(v: ClientView) =
+  ## Hides the log table.
+  if v.logLabel != nil:
+    v.logLabel.removeFromSuperview()
+    v.logLabel = nil
+    v.logScroll.removeFromSuperview()
+    v.logScroll = nil
+    v.state.showsLog = false
+
 
 method init*(v: ClientView, r: Rect) =
   procCall v.View.init(r)
