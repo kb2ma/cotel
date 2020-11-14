@@ -5,8 +5,8 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ button, segmented_control, table_view, text_field, timer, view,
-                window ]
+import nimx / [ button, image, menu, segmented_control, table_view, text_field,
+                timer, view, window ]
 import logging, tables, threadpool, parseOpt
 import conet, gui_util
 
@@ -35,24 +35,29 @@ proc handleTimerTick() =
     let v = clientState.userCtx
     if v.logScroll != nil:
       var f: File
-      discard open(f, "net.log")
-      let pos = f.getFileSize()
-      if pos > v.logPos:
-        f.setFilePos(v.logPos)
-        var lineText: string
-        while true:
-          if not f.readLine(lineText):
-            break
-          v.logLines.add(lineText)
+      if open(f, "net.log"):
+        let pos = f.getFileSize()
+        if pos > v.logPos:
+          f.setFilePos(v.logPos)
+          var lineText: string
+          while true:
+            if not f.readLine(lineText):
+              break
+            v.logLines.add(lineText)
 
-        v.logPos = pos
-        let tv = cast[TableView](v.logScroll.findSubviewWithName("logTable"))
-        tv.reloadData()
+          v.logPos = pos
+          let tv = cast[TableView](v.logScroll.findSubviewWithName("logTable"))
+          tv.reloadData()
+        f.close()
 
 
-proc onSelectView(wnd: Window, scName: string) =
+proc onSelectView(wnd: Window, selName: string) =
   ## Activate/Display the view for the selected name.
   var activeView: View
+
+  if activeName == selName:
+    # already visible
+    return
 
   # First detach the currently active view. On first selection there is not an
   # active view.
@@ -65,11 +70,11 @@ proc onSelectView(wnd: Window, scName: string) =
     clientState.userCtx = nil
 
   # create/initialize the new view
-  let nv = View(newObjectOfClass(scName & "View"))
+  let nv = View(newObjectOfClass(selName & "View"))
   nv.init(newRect(0, 30, wnd.bounds.width, wnd.bounds.height - 30))
   nv.resizingMask = "wh"
 
-  case scName
+  case selName
   of "Server":
     serverState.view = cast[ServerView](nv)
     serverState.view.update(serverState)
@@ -83,7 +88,7 @@ proc onSelectView(wnd: Window, scName: string) =
     wnd.replaceSubview(activeView, nv)
   else:
     wnd.addSubview(nv)
-  activeName = scName
+  activeName = selName
 
 
 proc startApplication(conf: CotelConf) =
@@ -95,16 +100,24 @@ proc startApplication(conf: CotelConf) =
   # Initialize UI
   let wnd = newWindow(newRect(40, 40, 800, 600))
   wnd.title = "Cotel"
-  let headerView = View.new(newRect(0, 0, wnd.bounds.width, 30))
+  let headerView = View.new(newRect(0, 0, wnd.bounds.width, 40))
   wnd.addSubview(headerView)
 
-  let sc = SegmentedControl.new(newRect(10, 10, 160, 22))
-  sc.segments = @["Client", "Server"]
-  sc.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
-  # display selected view
-  sc.onAction do():
-    onSelectView(wnd, sc.segments[sc.selectedSegment])
-  headerView.addSubview(sc)
+  let mItem = makeMenu("Cotel"):
+    - "Client":
+        onSelectView(wnd, "Client")
+    - "Server":
+        onSelectView(wnd, "Server")
+    - "-"
+    - "Toggle log":
+        if clientState.userCtx != nil:
+          toggleLogView(clientState.userCtx)
+
+  let imgBtn = newImageButton(newRect(10, 4, 32, 32))
+  imgBtn.image = imageWithContentsOfFile("menu.png")
+  imgBtn.onAction do():
+    mItem.popupAtPoint(imgBtn, newPoint(0, 25))
+  headerView.addSubview(imgBtn)
 
   # periodically check for messages from conet channel
   discard newTimer(0.5, true, handleTimerTick)

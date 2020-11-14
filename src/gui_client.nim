@@ -33,28 +33,31 @@ proc onChanMsg*(state: ClientState, msg: CoMsg) =
 proc onSendClicked(v: ClientView, jNode: JsonNode) =
   ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
 
-proc updateLogView*(v: ClientView, isShow: bool) =
+proc toggleLogView*(v: ClientView) =
   ## Show/Hide the log table. Also set up infrastructure to read net.log.
   ## Assumes view 'logLines' already initialized.
-  if not isShow:
-    if v.logLabel != nil:
-      v.logLabel.removeFromSuperview()
-      v.logScroll.removeFromSuperview()
-      return
+  if v.logScroll != nil:
+    v.logLabel.removeFromSuperview()
+    v.logLabel = nil
+    v.logScroll.removeFromSuperview()
+    v.logScroll = nil
+    return
 
   if v.logPos < 0:
     v.logPos = os.getFileSize("net.log")
 
   # build log label, list
-  v.logLabel = newLabel(newRect(20, v.bottomY + 30, 100, 20))
-  let labelText = newFormattedText("Log:")
-  labelText.horizontalAlignment = haRight
+  v.logLabel = newLabel(newRect(20, v.window.bounds.height - 220, 100, 20))
+  let labelText = newFormattedText("Log")
+  #labelText.horizontalAlignment = haRight
   v.logLabel.formattedText = labelText
   v.addSubview(v.logLabel)
 
-  let logTable = newTableView(newRect(140, v.bottomY + 30, 600, 200))
+  let logTable = newTableView(newRect(2, v.window.bounds.height - 200,
+                                      v.window.bounds.width,
+                                      v.window.bounds.height))
   logTable.name = "logTable"
-  #tableView.resizingMask = "rh"
+  logTable.autoresizingMask = {afFlexibleWidth}
   v.logScroll = newScrollView(logTable)
   v.addSubview(v.logScroll)
 
@@ -62,7 +65,7 @@ proc updateLogView*(v: ClientView, isShow: bool) =
   let cellFont = systemFontOfSize(12)
   logTable.numberOfRows = proc: int = v.logLines.len
   logTable.createCell = proc (): TableViewCell =
-    let label = newLabel(newRect(0, 0, 580, 16))
+    let label = newLabel(newRect(0, 0, v.window.bounds.width - 8, 16))
     label.font = cellFont
     result = newTableViewCell(label)
   logTable.configureCell = proc (c: TableViewCell) =
@@ -74,6 +77,9 @@ proc updateLogView*(v: ClientView, isShow: bool) =
 
 method init*(v: ClientView, r: Rect) =
   procCall v.View.init(r)
+
+  v.logPos = -1
+  v.logLines = newSeqOfCap[string](5)
 
   # y-coordinate for current row of UI
   var rowY = 20.Coord
@@ -95,17 +101,9 @@ method init*(v: ClientView, r: Rect) =
   v.addSubview(portLabel)
 
   let portTextField = newTextField(newRect(320, rowY, 80, 20))
-  portTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
+  #portTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   portTextField.text = "5683"
   v.addSubview(portTextField)
-
-  let logSelCbox = newCheckbox(newRect(500, rowY, 60, 16))
-  logSelCbox.title = "Show log"
-  logSelCbox.onAction do():
-    updateLogView(v, logSelCbox.boolValue)
-  v.logPos = -1
-  v.logLines = newSeqOfCap[string](5)
-  v.addSubview(logSelCbox)
 
   rowY += 30
 
@@ -116,7 +114,7 @@ method init*(v: ClientView, r: Rect) =
   v.addSubview(hostLabel)
 
   let hostTextField = newTextField(newRect(140, rowY, 300, 20))
-  hostTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
+  #hostTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   v.addSubview(hostTextField)
 
   rowY += 30
@@ -128,7 +126,7 @@ method init*(v: ClientView, r: Rect) =
   v.addSubview(pathLabel)
 
   let pathTextField = newTextField(newRect(140, rowY, 300, 20))
-  pathTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
+  #pathTextField.autoresizingMask = { afFlexibleWidth, afFlexibleMaxY }
   v.addSubview(pathTextField)
 
   rowY += 30
