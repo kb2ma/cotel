@@ -1,3 +1,3 @@
 --threads:on
---out:cotelg
+--out:cotel
 --debugger:native
