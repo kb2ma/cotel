@@ -3,7 +3,12 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import nativesockets, posix
+const useWinVersion = defined(Windows) or defined(nimdoc)
+when useWinVersion:
+  import winlean
+else:
+  import posix
+import nativesockets
 
 # only supports Linux at present
 const libName = "libcoap-2.so"

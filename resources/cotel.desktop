@@ -6,4 +6,4 @@ Icon=/home/kbee/dev/cotel/repo/resources/cotel32.png
 Type=Application
 Encoding=UTF-8
 Terminal=false
-StartupWMClass=cotelg
+StartupWMClass=cotel

@@ -3,6 +3,7 @@
 ## GUI for libcoap server and client
 ##
 ## Copyright 2020 Ken Bannister
+##
 ## SPDX-License-Identifier: Apache-2.0
 
 import nimx / [ button, image, menu, segmented_control, table_view, text_field,
@@ -78,12 +79,14 @@ proc onSelectView(wnd: Window, selName: string) =
   of "Server":
     serverState.view = cast[ServerView](nv)
     serverState.view.update(serverState)
+    wnd.title = "Cotel - Server"
   of "Client":
     let cv = cast[ClientView](nv)
     clientState.userCtx = cv
     cv.state = clientState
     if clientState.showsLog:
       cv.showLogView(wnd.bounds)
+    wnd.title = "Cotel - Client"
 
   # display the new view
   if activeName != "":

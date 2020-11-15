@@ -5,7 +5,24 @@
 ## Copyright 2020 Ken Bannister
 ## SPDX-License-Identifier: Apache-2.0
 
-import libcoap, posix, nativesockets
+const useWinVersion = defined(Windows) or defined(nimdoc)
+when useWinVersion:
+  import winlean
+  # copy values from posix if not defined in winlean
+  const posix_AF_UNSPEC = winlean.AF_UNSPEC
+  const posix_SOCK_DGRAM = cint(2)
+  const posix_AI_NUMERICHOST = cint(4)
+  const posix_AF_INET = winlean.AF_INET
+  const posix_AF_INET6 = winlean.AF_INET6
+else:
+  import posix
+  const posix_AF_UNSPEC = posix.AF_UNSPEC
+  const posix_SOCK_DGRAM = posix.SOCK_DGRAM
+  const posix_AI_NUMERICHOST = posix.AI_NUMERICHOST
+  const posix_AF_INET = posix.AF_INET
+  const posix_AF_INET6 = posix.AF_INET6
+
+import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils
 import conet_ctx
 # Provides the core context data for conet module users to share
@@ -61,7 +78,7 @@ proc handleCoapLog(level: CLogLevel, message: cstring)
   of LOG_DEBUG, COAP_LOG_CIPHERS:
     lvl = lvlDebug
 
-  # only strip trailing whitespace to avoid extra newline
+  # strip trailing whitespace to avoid extra newline
   oplog.log(lvl, strip($message, false))
 
 proc resolveAddress(ctx: CContext, host: string, port: string,
@@ -71,9 +88,9 @@ proc resolveAddress(ctx: CContext, host: string, port: string,
   ## suggest the IP version.
 
   var hints: AddrInfo
-  hints.ai_family = posix.AF_UNSPEC
-  hints.ai_socktype = posix.SOCK_DGRAM
-  hints.ai_flags = posix.AI_NUMERICHOST
+  hints.ai_family = posix_AF_UNSPEC
+  hints.ai_socktype = posix_SOCK_DGRAM
+  hints.ai_flags = posix_AI_NUMERICHOST
   # Use 'info' to iterate linked list, and retain first element in 'firstInfo'.
   var info, firstInfo: ptr AddrInfo
 
@@ -83,11 +100,11 @@ proc resolveAddress(ctx: CContext, host: string, port: string,
 
   while info != nil:
     case info.ai_family
-    of posix.AF_INET6:
+    of posix_AF_INET6:
       sockAddr.size = sizeof(SockAddr_in6).SockLen
       copyMem(addr sockAddr.`addr`.sin6, info.ai_addr, sockAddr.size)
       break
-    of posix.AF_INET:
+    of posix_AF_INET:
       sockAddr.size = sizeof(SockAddr_in).SockLen
       copyMem(addr sockAddr.`addr`.sin, info.ai_addr, sockAddr.size)
     else:
