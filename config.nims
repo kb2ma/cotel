@@ -1,4 +1,6 @@
-# Cotel artifact builder
+# Cotel artifact builder. Run against main module, like below:
+#
+#    $ nim <task> src/gui
 
 # hide the noisy messages
 hint("Conf", false)
@@ -10,8 +12,7 @@ task build, "Build executable":
   switch("debugger", "native")
   setCommand("c")
 
-task docs, "Deploy doc html + search index to build/doc directory":
-  #selfExec("doc --project --outdir:build/doc gui")
+task docs, "Build doc html":
   switch("project") 
   switch("outdir", "build/doc") 
   setCommand("doc")
