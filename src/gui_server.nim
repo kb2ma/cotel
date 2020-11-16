@@ -1,6 +1,9 @@
 ## Server view
 ##
+## View to monitor Cotel server operation
+##
 ## Copyright 2020 Ken Bannister
+##
 ## SPDX-License-Identifier: Apache-2.0
 
 import nimx / [ formatted_text, text_field, view ]

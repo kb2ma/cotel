@@ -1,6 +1,7 @@
 ## Utilities for Cotel UI
 ##
 ## Copyright 2020 Ken Bannister
+##
 ## SPDX-License-Identifier: Apache-2.0
 
 import base64, logging, parsetoml
@@ -17,7 +18,7 @@ type
 
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
-  ## confName must not be empty!
+  ## *confName* must not be empty!
   ## Raises IOError if can't read file.
   ## Raises ValueError if can't read a section/key.
 

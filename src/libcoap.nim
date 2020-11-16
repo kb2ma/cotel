@@ -1,6 +1,10 @@
-## libcoap wrapper
+## Straightforward wrapper module for libcoap. Click on the `{...}` for a proc
+## to see the corresponding libcoap function name. libcoap provides
+## [online documentation](https://libcoap.net/doc/reference/4.2.1/), or you
+## may build it yourself from [source](https://github.com/obgm/libcoap).
 ##
 ## Copyright 2020 Ken Bannister
+##
 ## SPDX-License-Identifier: Apache-2.0
 
 const useWinVersion = defined(Windows) or defined(nimdoc)

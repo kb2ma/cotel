@@ -1,6 +1,10 @@
-## Cotel GUI
+## Application main and GUI for Cotel libcoap server and client.
 ##
-## GUI for libcoap server and client
+## For the back end, uses [conet](conet.html) for CoAP neworking. Uses
+## [gui_util](gui_util.html) to read configuration file.
+##
+## For the UI, uses [gui_client](gui_client.html) and
+## [gui_server](gui_server.html) to provide those views.
 ##
 ## Copyright 2020 Ken Bannister
 ##
@@ -25,7 +29,8 @@ var
     ## name of the active view
 
 proc handleTimerTick() =
-  # Handle any incoming message from the conet channel
+  ## Handles any incoming message from the conet channel. Also reads in
+  ## additions to Conet operation log.
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
     serverState.onChanMsg(msgTuple.msg)

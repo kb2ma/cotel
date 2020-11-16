@@ -1,8 +1,19 @@
-## Conet: Cotel networking
+## Conet provides CoAP networking via the [libcoap module](libcoap.html).
+## An application runs Conet in a thread and communicates via the async
+## channels in the [conet_ctx module](conet_ctx.html).
 ##
-## Runs libcoap server and client
+## Start Conet with a call to [netLoop()](conet.html#netLoop%2CConetState),
+## which monitors network sockets as well as the channels to the enclosing
+## application. Conet provides two services:
+##
+## * receive requests from a single server endpoint with either NoSec or PSK security
+## * send requests to other servers, either with the secure coaps protocol or
+##   with the insecure coap protocol
+##
+## As a CoAP server, Conet listens only for a GET request to th `/hi` resource.
 ##
 ## Copyright 2020 Ken Bannister
+##
 ## SPDX-License-Identifier: Apache-2.0
 
 const useWinVersion = defined(Windows) or defined(nimdoc)

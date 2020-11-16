@@ -1,6 +1,7 @@
-## Client view
+## View to generate client request and show response
 ##
 ## Copyright 2020 Ken Bannister
+##
 ## SPDX-License-Identifier: Apache-2.0
 
 import nimx / [ button, font, formatted_text, popup_button, scroll_view,
