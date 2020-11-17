@@ -24,13 +24,15 @@ import gui_client, gui_server
 
 var
   clientState = ClientState(userCtx: nil, showsLog: false)
-  serverState = ServerState(view: nil, inText: "")
+    ## view independent aspects of client requests
+  serverState = ServerState(userCtx: nil, inText: "")
+    ## view independent aspects of server handling
   activeName = ""
     ## name of the active view
 
 proc handleTimerTick() =
-  ## Handles any incoming message from the conet channel. Also reads in
-  ## additions to Conet operation log.
+  ## Timer tick from nimx. Handle any incoming message from the conet channel.
+  ## Also displays additions to conet operation log in the UI.
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
     serverState.onChanMsg(msgTuple.msg)
@@ -40,21 +42,25 @@ proc handleTimerTick() =
   if clientState.userCtx != nil:
     let v = clientState.userCtx
     if v.logScroll != nil:
+      # only update when client log is visible
       var f: File
-      if open(f, "net.log"):
-        let pos = f.getFileSize()
-        if pos > v.logPos:
-          f.setFilePos(v.logPos)
-          var lineText: string
-          while true:
-            if not f.readLine(lineText):
-              break
-            v.logLines.add(lineText)
+      if not open(f, "net.log"):
+        oplog.log(lvlError, "Unable to open net.log")
+        return
 
-          v.logPos = pos
-          let tv = cast[TableView](v.logScroll.findSubviewWithName("logTable"))
-          tv.reloadData()
-        f.close()
+      let pos = f.getFileSize()
+      if pos > v.logPos:
+        f.setFilePos(v.logPos)
+        var lineText: string
+        while true:
+          if not f.readLine(lineText):
+            break
+          v.logLines.add(lineText)
+
+        v.logPos = pos
+        let tv = cast[TableView](v.logScroll.findSubviewWithName("logTable"))
+        tv.reloadData()
+      f.close()
 
 
 proc onSelectView(wnd: Window, selName: string) =
@@ -69,8 +75,8 @@ proc onSelectView(wnd: Window, selName: string) =
   # active view.
   case activeName
   of "Server":
-    activeView = serverState.view
-    serverState.view = nil
+    activeView = serverState.userCtx
+    serverState.userCtx = nil
   of "Client":
     activeView = clientState.userCtx
     clientState.userCtx = nil
@@ -82,8 +88,8 @@ proc onSelectView(wnd: Window, selName: string) =
 
   case selName
   of "Server":
-    serverState.view = cast[ServerView](nv)
-    serverState.view.update(serverState)
+    serverState.userCtx = cast[ServerView](nv)
+    serverState.userCtx.update(serverState)
     wnd.title = "Cotel - Server"
   of "Client":
     let cv = cast[ClientView](nv)
@@ -113,6 +119,7 @@ proc startApplication(conf: CotelConf) =
   let headerView = View.new(newRect(0, 0, wnd.bounds.width, 40))
   wnd.addSubview(headerView)
 
+  # Create menu
   let mItem = makeMenu("Cotel"):
     - "Client":
         onSelectView(wnd, "Client")
@@ -132,7 +139,7 @@ proc startApplication(conf: CotelConf) =
     mItem.popupAtPoint(imgBtn, newPoint(0, 25))
   headerView.addSubview(imgBtn)
 
-  # periodically check for messages from conet channel
+  # Periodically check for messages from conet channel
   discard newTimer(0.5, true, handleTimerTick)
 
   # Configure CoAP networking and spawn in a new thread
@@ -147,7 +154,7 @@ proc startApplication(conf: CotelConf) =
 
 
 runApplication:
-  # parse command line options
+  # nimx entry point. Parse command line options.
   var confName = ""
   var p = initOptParser()
   while true:
@@ -157,7 +164,7 @@ runApplication:
     of cmdShortOption, cmdLongOption:
       if p.key == "c":
         if p.val == "":
-          echo("Expected conf file name")
+          echo("Expected configuration file name")
         else:
           confName = p.val
       else:
@@ -168,10 +175,10 @@ runApplication:
   if confName == "":
     echo("Must provide configuration file")
     quit(QuitFailure)
-  else:
-    oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
-    try:
-      startApplication(readConfFile(confName))
-    except:
-      echo("Configuration file error: ", getCurrentExceptionMsg())
-      quit(QuitFailure)
+
+  oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
+  try:
+    startApplication(readConfFile(confName))
+  except:
+    oplog.log(lvlError, "App failure: ", getCurrentExceptionMsg())
+    quit(QuitFailure)

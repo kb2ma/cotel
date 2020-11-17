@@ -32,6 +32,8 @@ type
 proc onChanMsg*(state: ClientState, msg: CoMsg) =
   if msg.req == "response.payload":
     state.userCtx.respText.text = msg.payload
+  elif msg.req == "send_msg.error":
+    state.userCtx.respText.text = "Send error, see log"
 
 proc onSendClicked(v: ClientView, jNode: JsonNode) =
   ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
@@ -61,7 +63,7 @@ proc showLogView*(v: ClientView, wndBounds: Rect) =
   v.addSubview(v.logScroll)
 
   # Use smaller font, and use same Font instance for all cells
-  let cellFont = systemFontOfSize(12)
+  let cellFont = systemFontOfSize(14)
   logTable.numberOfRows = proc: int = v.logLines.len
   logTable.createCell = proc (): TableViewCell =
     let label = newLabel(newRect(0, 0, wndBounds.width - 8, 16))
@@ -73,7 +75,7 @@ proc showLogView*(v: ClientView, wndBounds: Rect) =
     tf.text = v.logLines[c.row]
     tf.selectable = true
   logTable.heightOfRow = proc (row: int): Coord =
-    result = 16
+    result = 18
   v.state.showsLog = true
 
 proc hideLogView*(v: ClientView) =

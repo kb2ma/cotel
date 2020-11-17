@@ -48,6 +48,9 @@ type
     pskKey*: seq[char]
     pskClientId*: string
 
+  ConetError* = object of CatchableError
+    ## Networking error recognized by conet
+
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
               {.exportc: "hnd_hi", noconv.} =
@@ -106,7 +109,9 @@ proc resolveAddress(ctx: CContext, host: string, port: string,
   var info, firstInfo: ptr AddrInfo
 
   initAddress(sockAddr)
-  let res = getaddrinfo(host, port, addr hints, firstInfo)
+  if getaddrinfo(host, port, addr hints, firstInfo).bool:
+    raise newException(ConetError,
+                       "Can't resolve address for host $#, port $#" % [host, port])
   info = firstInfo
 
   while info != nil:
@@ -149,8 +154,7 @@ proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
     # proto must be 'coap'
     session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
   if session == nil:
-    oplog.log(lvlError, "Can't create client session")
-    return
+    raise newException(ConetError, "Can't create client session")
 
   # init PDU, including type and code
   var msgType: uint8
@@ -162,9 +166,8 @@ proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
   var pdu = initPdu(msgType, COAP_REQUEST_GET.uint8, 1000'u16,
                     maxSessionPduSize(session))
   if pdu == nil:
-    oplog.log(lvlError, "Can't create client PDU")
     releaseSession(session)
-    return
+    raise newException(ConetError, "Can't create client PDU")
 
   # add Uri-Path options
   let uriPath = reqJson["uriPath"].getStr()
@@ -179,23 +182,19 @@ proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
       let optlist = newOptlist(COAP_OPTION_URI_PATH, token.len.csize_t,
                                cast[ptr uint8](token.cstring))
       if optlist == nil:
-        oplog.log(lvlError, "Can't create option list")
-        return
-      if insertOptlist(addr chain, optlist) == 0:
-        oplog.log(lvlError, "Can't add to option chain")
-        return
+        raise newException(ConetError, "Can't create option list")
+      if not insertOptlist(addr chain, optlist).bool:
+        raise newException(ConetError, "Can't add to option chain")
     pos = pos + plen + 1
 
   # Path may just be "/". No PDU option in that case.
   if chain == nil and uriPath != "/":
-    oplog.log(lvlError, "Can't create option list")
-    return
-  if chain != nil and addOptlistPdu(pdu, addr chain) == 0:
-    oplog.log(lvlError, "Can't create option list")
+    raise newException(ConetError, "Can't create option list (2)")
+  if chain != nil and not addOptlistPdu(pdu, addr chain).bool:
     deleteOptlist(chain)
     deletePdu(pdu)
     releaseSession(session)
-    return
+    raise newException(ConetError, "Can't create option list (3)")
   deleteOptlist(chain)
 
   # send
@@ -214,35 +213,39 @@ proc netLoop*(state: ConetState) =
   # init context, listen port/endpoint
   var ctx = newContext(nil)
 
-  # CoAP server setup
-  var address = create(CSockAddr)
-  resolveAddress(ctx, state.listenAddr, $state.serverPort, address)
+  try:
+    # CoAP server setup
+    var address = create(CSockAddr)
+    resolveAddress(ctx, state.listenAddr, $state.serverPort, address)
 
-  var proto: CProto
-  var secMode: string
-  case state.securityMode
-  of SECURITY_MODE_PSK:
-    if setContextPsk(ctx, "", cast[ptr uint8](addr state.pskKey[0]),
-                     state.pskKey.len.csize_t) == 0:
-      oplog.log(lvlError, "Can't set context PSK")
-      return
-    proto = COAP_PROTO_DTLS
-    secMode = "PSK"
-  of SECURITY_MODE_NOSEC:
-    proto = COAP_PROTO_UDP
-    secMode = "NoSec"
+    var proto: CProto
+    var secMode: string
+    case state.securityMode
+    of SECURITY_MODE_PSK:
+      if not setContextPsk(ctx, "", cast[ptr uint8](addr state.pskKey[0]),
+                       state.pskKey.len.csize_t).bool:
+        raise newException(ConetError, "Can't set context PSK")
+      proto = COAP_PROTO_DTLS
+      secMode = "PSK"
+    of SECURITY_MODE_NOSEC:
+      proto = COAP_PROTO_UDP
+      secMode = "NoSec"
 
-  discard newEndpoint(ctx, address, proto)
+    if newEndpoint(ctx, address, proto) == nil:
+      raise newException(ConetError, "Can't create server listening endpoint")
 
-  oplog.log(lvlInfo, "Cotel networking ", secMode, " listening on ",
-            state.listenAddr, ":", $state.serverPort)
+    oplog.log(lvlInfo, "Cotel networking ", secMode, " listening on ",
+              state.listenAddr, ":", $state.serverPort)
 
-  # Establish server resources and request handlers, and also the client
-  # response handler.
-  var r = initResource(makeStringConst("hi"), 0)
-  registerHandler(r, COAP_REQUEST_GET, handleHi)
-  addResource(ctx, r)
-  registerResponseHandler(ctx, handleResponse)
+    # Establish server resources and request handlers, and also the client
+    # response handler.
+    var r = initResource(makeStringConst("hi"), 0)
+    registerHandler(r, COAP_REQUEST_GET, handleHi)
+    addResource(ctx, r)
+    registerResponseHandler(ctx, handleResponse)
+  except CatchableError as e:
+    oplog.log(lvlError, e.msg)
+    quit(QuitFailure)
 
   # Serve resources until quit
   while true:
@@ -252,7 +255,11 @@ proc netLoop*(state: ConetState) =
     if msgTuple.dataAvailable:
       case msgTuple.msg.req
       of "send_msg":
-        send_message(ctx, state, msgTuple.msg.payload)
+        try:
+          send_message(ctx, state, msgTuple.msg.payload)
+        except CatchableError as e:
+          oplog.log(lvlError, e.msg)
+          netChan.send( CoMsg(req: "send_msg.error", payload: e.msg) )
       of "quit":
         break
       else:

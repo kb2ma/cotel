@@ -17,7 +17,7 @@ type
 
   ServerState* = ref object
     # Data useful for management of CoAP server view
-    view*: ServerView
+    userCtx*: ServerView
     securityMode*: SecurityMode
     listenAddr*: string
     port*: int
@@ -26,8 +26,8 @@ type
 proc onChanMsg*(state: ServerState, msg: CoMsg) =
   if msg.req == "request.log":
     state.inText = msg.payload & " at " & now().format("H:mm:ss ")
-    if state.view != nil:
-      state.view.inText.text = state.inText
+    if state.userCtx != nil:
+      state.userCtx.inText.text = state.inText
 
 proc update*(v: ServerView, state: ServerState) =
   case state.securityMode
