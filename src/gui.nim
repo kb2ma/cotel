@@ -114,7 +114,7 @@ proc startApplication(conf: CotelConf) =
   serverState.port = conf.serverPort
 
   # Initialize UI
-  let wnd = newWindow(newRect(40, 40, 800, 600))
+  let wnd = newWindow(newRect(40, 40, 800, 540))
   wnd.title = "Cotel"
   let headerView = View.new(newRect(0, 0, wnd.bounds.width, 40))
   wnd.addSubview(headerView)

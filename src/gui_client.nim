@@ -33,7 +33,7 @@ proc onChanMsg*(state: ClientState, msg: CoMsg) =
   if msg.req == "response.payload":
     state.userCtx.respText.text = msg.payload
   elif msg.req == "send_msg.error":
-    state.userCtx.respText.text = "Send error, see log"
+    state.userCtx.respText.text = "Error sending, see log"
 
 proc onSendClicked(v: ClientView, jNode: JsonNode) =
   ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
@@ -49,16 +49,17 @@ proc showLogView*(v: ClientView, wndBounds: Rect) =
     v.logPos = os.getFileSize("net.log")
 
   # build log label, list
-  v.logLabel = newLabel(newRect(20, wndBounds.height - 220, 100, 20))
+  v.logLabel = newLabel(newRect(20, v.bottomY + 20, 100, 20))
   let labelText = newFormattedText("Log")
-  #labelText.horizontalAlignment = haRight
   v.logLabel.formattedText = labelText
   v.addSubview(v.logLabel)
 
-  let logTable = newTableView(newRect(6, wndBounds.height - 200,
-                                      wndBounds.width, wndBounds.height))
+  let logTable = newTableView(newRect(6, v.bottomY + 44,
+                                      wndBounds.width - 10, 158))
   logTable.name = "logTable"
+  # table resizes to width of window, and scrolls vertically when full of items
   logTable.autoresizingMask = {afFlexibleWidth}
+  logTable.backgroundColor = whiteColor()
   v.logScroll = newScrollView(logTable)
   v.addSubview(v.logScroll)
 
@@ -66,13 +67,17 @@ proc showLogView*(v: ClientView, wndBounds: Rect) =
   let cellFont = systemFontOfSize(14)
   logTable.numberOfRows = proc: int = v.logLines.len
   logTable.createCell = proc (): TableViewCell =
-    let label = newLabel(newRect(0, 0, wndBounds.width - 8, 16))
+    # using hardcoded width, but it works OK
+    let label = newLabel(newRect(0, 0, 300, 16))
     label.font = cellFont
     result = newTableViewCell(label)
   logTable.configureCell = proc (c: TableViewCell) =
     let tf = TextField(c.subviews[0])
+    let ft = newFormattedText(v.logLines[c.row])
+    # use ellipsis so cell/field doesn't attempt to wrap
+    ft.truncationBehavior = tbEllipsis
+    tf.formattedText = ft
     tf.font = cellFont
-    tf.text = v.logLines[c.row]
     tf.selectable = true
   logTable.heightOfRow = proc (row: int): Coord =
     result = 18
@@ -195,12 +200,13 @@ method init*(v: ClientView, r: Rect) =
   respLabel.formattedText = respLabelText
   v.addSubview(respLabel)
 
-  let respTextLabel = newLabel(newRect(140, rowY, 500, 80))
+  let respTextLabel = newLabel(newRect(140, rowY, 500, 120))
   v.respText = newFormattedText("")
   respTextLabel.formattedText = v.respText
+  respTextLabel.backgroundColor = whiteColor()
   v.respText.verticalAlignment = vaTop
   v.addSubview(respTextLabel)
 
-  v.bottomY = rowY.Coord + 80
+  v.bottomY = rowY.Coord + 120
 
 registerClass(ClientView)
