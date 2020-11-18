@@ -209,6 +209,7 @@ proc netLoop*(state: ConetState) =
   open(ctxChan)
   setLogLevel(LOG_DEBUG)
   setLogHandler(handleCoapLog)
+  setDtlsLogLevel(LOG_DEBUG)
 
   # init context, listen port/endpoint
   var ctx = newContext(nil)

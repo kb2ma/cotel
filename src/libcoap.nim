@@ -218,6 +218,9 @@ proc newOptlist*(number: uint16, length: csize_t, data: ptr uint8): COptlist
 proc processIo*(context: CContext, timeout: uint32): cint
                {.importc: "coap_io_process".}
 
+# coap_dtls.h
+proc setDtlsLogLevel*(level: CLogLevel) {.importc: "coap_dtls_set_log_level".}
+
 # address.h
 proc initAddress*(address: ptr CSockAddr) {.importc: "coap_address_init".}
 
