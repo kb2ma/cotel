@@ -10,8 +10,8 @@
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
-import nimx / [ button, image, menu, segmented_control, table_view, text_field,
-                timer, view, window ]
+import imgui, imgui/[impl_opengl, impl_glfw]
+import nimgl/[opengl, glfw]
 import logging, tables, threadpool, parseOpt
 import conet, gui_util
 
@@ -19,129 +19,42 @@ import conet, gui_util
 # *are* used, but code that generates this warning does not realize that.
 {.warning[UnusedImport]:off.}
 
-# subviews
-import gui_client, gui_server
+var isRequestOpen = false
 
-var
-  clientState = ClientState(userCtx: nil, showsLog: false)
-    ## view independent aspects of client requests
-  serverState = ServerState(userCtx: nil, inText: "")
-    ## view independent aspects of server handling
-  activeName = ""
-    ## name of the active view
+proc showRequestWindow() =
+  igSetNextWindowSize(ImVec2(x: 500, y: 440))
+  if igBegin("Request", isRequestOpen.addr):
+    igEnd()
 
-proc handleTimerTick() =
-  ## Timer tick from nimx. Handle any incoming message from the conet channel.
-  ## Also displays additions to conet operation log in the UI.
-  var msgTuple = netChan.tryRecv()
-  if msgTuple.dataAvailable:
-    serverState.onChanMsg(msgTuple.msg)
-    if clientState.userCtx != nil:
-      clientState.onChanMsg(msgTuple.msg)
+proc renderScene(w: GLFWWindow, width: int32, height: int32) =
+  glViewport(0, 0, width, height)
+  igOpenGL3NewFrame()
+  igGlfwNewFrame()
+  igNewFrame()
 
-  if clientState.userCtx != nil:
-    let v = clientState.userCtx
-    if v.logScroll != nil:
-      # only update when client log is visible
-      var f: File
-      if not open(f, "net.log"):
-        oplog.log(lvlError, "Unable to open net.log")
-        return
+  if isRequestOpen:
+    showRequestWindow()
 
-      let pos = f.getFileSize()
-      if pos > v.logPos:
-        f.setFilePos(v.logPos)
-        var lineText: string
-        while true:
-          if not f.readLine(lineText):
-            break
-          v.logLines.add(lineText)
+  if igBeginMainMenuBar():
+    if igBeginMenu("Client"):
+      igMenuItem("New Request", nil, isRequestOpen.addr)
+      igEndMenu()
+    igEndMainMenuBar()
 
-        v.logPos = pos
-        let tv = cast[TableView](v.logScroll.findSubviewWithName("logTable"))
-        tv.reloadData()
-      f.close()
+  igRender()
 
+  glClearColor(0.45f, 0.55f, 0.60f, 1.00f)
+  glClear(GL_COLOR_BUFFER_BIT)
 
-proc onSelectView(wnd: Window, selName: string) =
-  ## Activate/Display the view for the selected name.
-  var activeView: View
+  igOpenGL3RenderDrawData(igGetDrawData())
+  w.swapBuffers()
 
-  if activeName == selName:
-    # already visible
-    return
+proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl.} =
+  glfwSwapInterval(0)
+  renderScene(w, width, height)
+  glfwSwapInterval(1)
 
-  # First detach the currently active view. On first selection there is not an
-  # active view.
-  case activeName
-  of "Server":
-    activeView = serverState.userCtx
-    serverState.userCtx = nil
-  of "Client":
-    activeView = clientState.userCtx
-    clientState.userCtx = nil
-
-  # create/initialize the new view
-  let nv = View(newObjectOfClass(selName & "View"))
-  nv.init(newRect(0, 30, wnd.bounds.width, wnd.bounds.height - 30))
-  nv.resizingMask = "wh"
-
-  case selName
-  of "Server":
-    serverState.userCtx = cast[ServerView](nv)
-    serverState.userCtx.update(serverState)
-    wnd.title = "Cotel - Server"
-  of "Client":
-    let cv = cast[ClientView](nv)
-    clientState.userCtx = cv
-    cv.state = clientState
-    if clientState.showsLog:
-      cv.showLogView(wnd.bounds)
-    wnd.title = "Cotel - Client"
-
-  # display the new view
-  if activeName != "":
-    wnd.replaceSubview(activeView, nv)
-  else:
-    wnd.addSubview(nv)
-  activeName = selName
-
-
-proc startApplication(conf: CotelConf) =
-  # Initialize state from configuraton
-  serverState.securityMode = conf.securityMode
-  serverState.listenAddr = conf.serverAddr
-  serverState.port = conf.serverPort
-
-  # Initialize UI
-  let wnd = newWindow(newRect(40, 40, 800, 540))
-  wnd.title = "Cotel"
-  let headerView = View.new(newRect(0, 0, wnd.bounds.width, 40))
-  wnd.addSubview(headerView)
-
-  # Create menu
-  let mItem = makeMenu("Cotel"):
-    - "Client":
-        onSelectView(wnd, "Client")
-    - "Server":
-        onSelectView(wnd, "Server")
-    - "-"
-    - "Toggle log":
-        if clientState.userCtx != nil:
-          if clientState.showsLog:
-            hideLogView(clientState.userCtx)
-          else:
-            showLogView(clientState.userCtx, wnd.bounds)
-
-  let imgBtn = newImageButton(newRect(10, 4, 32, 32))
-  imgBtn.image = imageWithContentsOfFile("menu.png")
-  imgBtn.onAction do():
-    mItem.popupAtPoint(imgBtn, newPoint(0, 25))
-  headerView.addSubview(imgBtn)
-
-  # Periodically check for messages from conet channel
-  discard newTimer(0.5, true, handleTimerTick)
-
+proc main(conf: CotelConf) =
   # Configure CoAP networking and spawn in a new thread
   let conetState = ConetState(listenAddr: conf.serverAddr,
                               serverPort: conf.serverPort,
@@ -149,36 +62,69 @@ proc startApplication(conf: CotelConf) =
                               pskKey: conf.pskKey, pskClientId: conf.pskClientId)
   spawn netLoop(conetState)
 
-  # Show client page initially
-  onSelectView(wnd, "Client")
+  # GLFW initialization
+  assert glfwInit()
+  glfwWindowHint(GLFWContextVersionMajor, 4)
+  glfwWindowHint(GLFWContextVersionMinor, 1)
+  glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE)
+  glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
+
+  let w = glfwCreateWindow(640, 480, "Cotel")
+  if w == nil:
+    quit(QuitFailure)
+  discard setFramebufferSizeCallback(w, framebufferSizeCallback)
+  w.makeContextCurrent()
+
+  # OpenGL, ImGui (including for GLFW) initialization
+  assert glInit()
+  let context = igCreateContext()
+  assert igGlfwInitForOpenGL(w, true)
+  assert igOpenGL3Init()
+
+  igStyleColorsClassic()
+
+  let fAtlas = igGetIO().fonts
+  discard addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 16)
+
+  while not w.windowShouldClose:
+    glfwPollEvents()
+    var fbWidth, fbHeight: int32
+    getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
+    renderScene(w, fbWidth, fbHeight)
+
+  igOpenGL3Shutdown()
+  igGlfwShutdown()
+  context.igDestroyContext()
+
+  w.destroyWindow()
+  glfwTerminate()
 
 
-runApplication:
-  # nimx entry point. Parse command line options.
-  var confName = ""
-  var p = initOptParser()
-  while true:
-    p.next()
-    case p.kind
-    of cmdEnd: break
-    of cmdShortOption, cmdLongOption:
-      if p.key == "c":
-        if p.val == "":
-          echo("Expected configuration file name")
-        else:
-          confName = p.val
+# Parse command line options.
+var confName = ""
+var p = initOptParser()
+while true:
+  p.next()
+  case p.kind
+  of cmdEnd: break
+  of cmdShortOption, cmdLongOption:
+    if p.key == "c":
+      if p.val == "":
+        echo("Expected configuration file name")
       else:
-        echo("Option ", p.key, " not understood")
-    of cmdArgument:
-      echo("Argument ", p.key, " not understood")
+        confName = p.val
+    else:
+      echo("Option ", p.key, " not understood")
+  of cmdArgument:
+    echo("Argument ", p.key, " not understood")
 
-  if confName == "":
-    echo("Must provide configuration file")
-    quit(QuitFailure)
+if confName == "":
+  echo("Must provide configuration file")
+  quit(QuitFailure)
 
-  oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
-  try:
-    startApplication(readConfFile(confName))
-  except:
-    oplog.log(lvlError, "App failure: ", getCurrentExceptionMsg())
-    quit(QuitFailure)
+oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
+try:
+  main(readConfFile(confName))
+except:
+  oplog.log(lvlError, "App failure: ", getCurrentExceptionMsg())
+  quit(QuitFailure)
