@@ -20,13 +20,23 @@ import conet, gui_util
 {.warning[UnusedImport]:off.}
 
 var isRequestOpen = false
+var currentItem = 0'i32
 
 proc showRequestWindow() =
-  igSetNextWindowSize(ImVec2(x: 500, y: 440))
-  if igBegin("Request", isRequestOpen.addr):
-    igEnd()
+  igSetNextWindowSize(ImVec2(x: 500, y: 440), FirstUseEver)
+  igBegin("Request", isRequestOpen.addr)
+  igText("Protocol")
+  igSameLine()
+  igSetNextItemWidth(100)
+  
+  var items = ["coap".cstring, "coaps".cstring]
+  discard igCombo("##proto", currentItem.addr, items[0].addr, 2)
+  
+  #proc igCombo*(label: cstring, current_item: ptr int32, items: ptr cstring, items_count: int32, popup_max_height_in_items: int32 = -1): bool {.importc: "igComboStr_arr".}
+  igEnd()
 
-proc renderScene(w: GLFWWindow, width: int32, height: int32) =
+proc renderUi(w: GLFWWindow, width: int32, height: int32) =
+  ## Renders UI windows/widgets.
   glViewport(0, 0, width, height)
   igOpenGL3NewFrame()
   igGlfwNewFrame()
@@ -50,11 +60,15 @@ proc renderScene(w: GLFWWindow, width: int32, height: int32) =
   w.swapBuffers()
 
 proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl.} =
+  ## Callback from GLFW that uses updated width/height of FB. Helps prevent
+  ## window jumpiness when user vertically resizes OS window frame.
   glfwSwapInterval(0)
-  renderScene(w, width, height)
+  renderUi(w, width, height)
   glfwSwapInterval(1)
 
 proc main(conf: CotelConf) =
+  ## Initializes and runs display loop. The display mechanism here is idiomatic
+  ## for a GLFW/OpenGL3 based ImGui.
   # Configure CoAP networking and spawn in a new thread
   let conetState = ConetState(listenAddr: conf.serverAddr,
                               serverPort: conf.serverPort,
@@ -90,7 +104,7 @@ proc main(conf: CotelConf) =
     glfwPollEvents()
     var fbWidth, fbHeight: int32
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
-    renderScene(w, fbWidth, fbHeight)
+    renderUi(w, fbWidth, fbHeight)
 
   igOpenGL3Shutdown()
   igGlfwShutdown()
