@@ -1,3 +1,2 @@
 --threads:on
---out:cotelc
 --debugger:native
