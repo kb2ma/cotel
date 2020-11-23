@@ -19,6 +19,10 @@ type
 var
   netChan*: Channel[CoMsg]
     ## Communication channel from conet to enclosing context
+    ##
+    ## * send_msg.error: Error sending message; payload is plain text
+    ## * response.payload: Response to request; payload is JSON with 'code'
+    ##   and 'payload'
   ctxChan*: Channel[CoMsg]
     ## Communication channel from enclosing context to conet
   oplog* {.threadvar.}: FileLogger

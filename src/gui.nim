@@ -13,27 +13,19 @@
 import imgui, imgui/[impl_opengl, impl_glfw]
 import nimgl/[opengl, glfw]
 import logging, tables, threadpool, parseOpt
-import conet, gui_util
+import conet, gui_util, gui_client
 
 # Disables these warnings for gui_... module imports above. The modules actually
 # *are* used, but code that generates this warning does not realize that.
 {.warning[UnusedImport]:off.}
 
 var isRequestOpen = false
-var currentItem = 0'i32
 
-proc showRequestWindow() =
-  igSetNextWindowSize(ImVec2(x: 500, y: 440), FirstUseEver)
-  igBegin("Request", isRequestOpen.addr)
-  igText("Protocol")
-  igSameLine()
-  igSetNextItemWidth(100)
-  
-  var items = ["coap".cstring, "coaps".cstring]
-  discard igCombo("##proto", currentItem.addr, items[0].addr, 2)
-  
-  #proc igCombo*(label: cstring, current_item: ptr int32, items: ptr cstring, items_count: int32, popup_max_height_in_items: int32 = -1): bool {.importc: "igComboStr_arr".}
-  igEnd()
+proc checkNetChannel() =
+  var msgTuple = netChan.tryRecv()
+  if msgTuple.dataAvailable:
+    if isRequestOpen:
+      onNetMsgRequest(msgTuple.msg)
 
 proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   ## Renders UI windows/widgets.
@@ -43,11 +35,11 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   igNewFrame()
 
   if isRequestOpen:
-    showRequestWindow()
+    showRequestWindow(isRequestOpen.addr)
 
   if igBeginMainMenuBar():
-    if igBeginMenu("Client"):
-      igMenuItem("New Request", nil, isRequestOpen.addr)
+    if igBeginMenu("Tools"):
+      igMenuItem("Client Request", nil, isRequestOpen.addr)
       igEndMenu()
     igEndMainMenuBar()
 
@@ -102,6 +94,7 @@ proc main(conf: CotelConf) =
 
   while not w.windowShouldClose:
     glfwPollEvents()
+    checkNetChannel()
     var fbWidth, fbHeight: int32
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
     renderUi(w, fbWidth, fbHeight)

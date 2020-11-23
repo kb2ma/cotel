@@ -70,12 +70,15 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   var dataPtr: ptr uint8
   discard getData(received, addr dataLen, addr dataPtr)
 
-  let codeStr = "[code $#.$#]\n" % [fmt"{received.code shr 5}",
-                                    fmt"{received.code and 0x1F:>02}"]
-
+  let codeStr = "$#.$#\n" % [fmt"{received.code shr 5}",
+                             fmt"{received.code and 0x1F:>02}"]
   var dataStr = newString(dataLen)
   copyMem(addr dataStr[0], dataPtr, dataLen)
-  netChan.send( CoMsg(req: "response.payload", payload: codeStr & dataStr) )
+
+  let jNode = %* { "code": codeStr, "payload": dataStr }
+
+  netChan.send( CoMsg(req: "response.payload", payload: $jNode) )
+
 
 proc handleCoapLog(level: CLogLevel, message: cstring)
                    {.exportc: "hnd_log", noconv.} =
