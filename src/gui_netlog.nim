@@ -6,8 +6,8 @@
 ## provided by 'guiLines'. We cap the length of the array at LOG_LINES_MAX and
 ## store the current value in 'guiLen'. Internally gui_netlog maintains a Nim
 ## sequence of strings, 'logLines', that is the source for the C strings in
-## 'guiLines'. 'logLines includes an extra buffer of lines so it does not need
-## to replace the contents of 'guiLines' with each new log entry.
+## guiLines. logLines includes an extra buffer of lines so it does not need
+## to update the contents of guiLines with each new log entry.
 ##
 ## Copyright 2020 Ken Bannister
 ##
@@ -55,7 +55,7 @@ proc checkNetworkLog*() =
 
   let pos = f.getFileSize()
   if pos > logPos:
-    # add new lines to 'logLines'
+    # add new lines to logLines
     f.setFilePos(logPos)
     var lineText: string
     var startLen = logLines.len()
@@ -65,10 +65,10 @@ proc checkNetworkLog*() =
       logLines.add(lineText)
     logPos = pos
 
-    # copy new lines to 'guiLines'
+    # update guiLines with new lines
     var newLen = logLines.len()
     if newLen > startLen:
-      # resize 'logLines' if beyond line buffer limit
+      # resize logLines if beyond line buffer limit
       if newLen >= (LOG_LINES_MAX + BUFFER_LINES_MAX):
         logLines.delete(0, newLen - LOG_LINES_MAX - 1)
         startLen = 0
