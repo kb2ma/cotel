@@ -13,13 +13,14 @@
 import imgui, imgui/[impl_opengl, impl_glfw]
 import nimgl/[opengl, glfw]
 import logging, tables, threadpool, parseOpt
-import conet, gui_util, gui_client
+import conet, gui_util, gui_client, gui_netlog
 
 # Disables these warnings for gui_... module imports above. The modules actually
 # *are* used, but code that generates this warning does not realize that.
 {.warning[UnusedImport]:off.}
 
-var isRequestOpen = false
+const TICK_FREQUENCY = 30
+  ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
 
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
@@ -35,11 +36,14 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   igNewFrame()
 
   if isRequestOpen:
-    showRequestWindow(isRequestOpen.addr)
+    showRequestWindow()
+  if isNetlogOpen:
+    showNetlogWindow()
 
   if igBeginMainMenuBar():
     if igBeginMenu("Tools"):
       igMenuItem("Client Request", nil, isRequestOpen.addr)
+      igMenuItem("Network Log", nil, isNetlogOpen.addr)
       igEndMenu()
     igEndMainMenuBar()
 
@@ -61,6 +65,9 @@ proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl
 proc main(conf: CotelConf) =
   ## Initializes and runs display loop. The display mechanism here is idiomatic
   ## for a GLFW/OpenGL3 based ImGui.
+  # Init before starting networking so it shows all messages from this session.
+  initNetworkLog()
+
   # Configure CoAP networking and spawn in a new thread
   let conetState = ConetState(listenAddr: conf.serverAddr,
                               serverPort: conf.serverPort,
@@ -75,7 +82,7 @@ proc main(conf: CotelConf) =
   glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE)
   glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
 
-  let w = glfwCreateWindow(640, 480, "Cotel")
+  let w = glfwCreateWindow(750, 650, "Cotel")
   if w == nil:
     quit(QuitFailure)
   discard setFramebufferSizeCallback(w, framebufferSizeCallback)
@@ -92,12 +99,19 @@ proc main(conf: CotelConf) =
   let fAtlas = igGetIO().fonts
   discard addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 16)
 
+  var loopCount = 0
   while not w.windowShouldClose:
     glfwPollEvents()
     checkNetChannel()
+    # 
+    if loopCount >= TICK_FREQUENCY:
+      loopCount = 0
+      checkNetworkLog()
+
     var fbWidth, fbHeight: int32
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
     renderUi(w, fbWidth, fbHeight)
+    loopCount += 1
 
   igOpenGL3Shutdown()
   igGlfwShutdown()

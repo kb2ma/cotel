@@ -9,16 +9,18 @@ import json
 import conet
 
 
-# vars mostly for display fields
 var
+  isRequestOpen* = false
+    ## Enclosing context sets this value
   protoItems = ["coap".cstring, "coaps".cstring]
   typeItems = ["NON".cstring, "CON".cstring]
 
+  # widget contents
   reqProtoIndex = 0'i32
   reqPort = 5683'i32
-  reqHost = newString(64).cstring
+  reqHost = newString(64)
   reqTypeIndex = 0'i32
-  reqPath = newString(64).cstring
+  reqPath = newString(64)
   respCode = ""
   respText = ""
   errText = ""
@@ -31,9 +33,9 @@ proc onNetMsgRequest*(msg: CoMsg) =
   elif msg.req == "send_msg.error":
     errText = "Error sending, see log"
 
-proc showRequestWindow*(isOpen: ptr bool) =
+proc showRequestWindow*() =
   igSetNextWindowSize(ImVec2(x: 500, y: 300), FirstUseEver)
-  igBegin("Request", isOpen)
+  igBegin("Request", isRequestOpen.addr)
   let labelColWidth = 90f
 
   igText("Protocol")
@@ -50,12 +52,12 @@ proc showRequestWindow*(isOpen: ptr bool) =
   igText("Host")
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
-  igInputText("##host", reqHost, 64);
+  igInputText("##host", reqHost.cstring, 64);
 
   igText("URI Path")
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
-  igInputText("##path", reqPath, 64);
+  igInputText("##path", reqPath.cstring, 64);
 
   igText("Msg Type")
   igSameLine(labelColWidth)
@@ -66,8 +68,8 @@ proc showRequestWindow*(isOpen: ptr bool) =
     # reset error text for this send
     errText = ""
     var jNode = %*
-      { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath,
-        "proto": $protoItems[reqProtoIndex], "remHost": $reqHost,
+      { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
+        "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
         "remPort": reqPort }
     ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
   igSameLine(labelColWidth)

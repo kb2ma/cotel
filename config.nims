@@ -7,6 +7,7 @@ hint("Conf", false)
 hint("Processing", false)
 
 task build, "Build executable":
+  #switch("forceBuild", "on")
   switch("out", "cotel")
   switch("outdir", "build/bin") 
   switch("debugger", "native")
