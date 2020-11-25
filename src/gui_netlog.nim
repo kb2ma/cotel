@@ -105,6 +105,5 @@ proc showNetlogWindow*() =
   heightInItems = trunc(heightInItems) - 2
   igListBox("##netlist", selectedLine.addr, guiLines[0].addr, guiLen.int32,
             heightInItems.int32)
-  igSetScrollHereY(1.0f)
 
   igEnd()
