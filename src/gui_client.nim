@@ -64,7 +64,10 @@ proc showRequestWindow*() =
   igSetNextItemWidth(100)
   discard igCombo("##msgType", reqTypeIndex.addr, typeItems[0].addr, 2)
 
-  if igButton("Send Req"):
+  let isEnterPressed = igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
+                       igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
+
+  if igButton("Send Req") or isEnterPressed:
     # reset error text for this send
     errText = ""
     var jNode = %*
