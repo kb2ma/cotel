@@ -84,7 +84,8 @@ proc main(conf: CotelConf) =
   glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE)
   glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
 
-  let w = glfwCreateWindow(750, 650, "Cotel")
+  let w = glfwCreateWindow(conf.windowSize[0].int32, conf.windowSize[1].int32,
+                           "Cotel")
   if w == nil:
     quit(QuitFailure)
   discard setFramebufferSizeCallback(w, framebufferSizeCallback)

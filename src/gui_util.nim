@@ -4,17 +4,18 @@
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
-import base64, logging, parsetoml
+import base64, logging, parsetoml, sequtils
 import conet_ctx
 
 type
   CotelConf* = ref object
-    ## Configuration data for Cotel app
+    ## Configuration data for Cotel app. See src/cotel.conf for details.
     serverAddr*: string
     serverPort*: int
     securityMode*: SecurityMode
     pskKey*: seq[char]
     pskClientId*: string
+    windowSize*: seq[int]
 
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
@@ -51,5 +52,9 @@ proc readConfFile*(confName: string): CotelConf =
   # client_id is a text string. Client requests use the same PSK key as the
   # local server.
   result.pskClientId = getStr(tSec["client_id"])
+
+  # GUI section
+  let tGui = toml["GUI"]
+  result.windowSize = tGui["window_size"].getElems().mapIt(it.getInt())
 
   oplog.log(lvlInfo, "Conf file read OK")
