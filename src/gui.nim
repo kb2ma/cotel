@@ -3,8 +3,10 @@
 ## For the back end, uses [conet](conet.html) for CoAP neworking. Uses
 ## [gui_util](gui_util.html) to read configuration file.
 ##
-## For the UI, uses [gui_client](gui_client.html) and
-## [gui_server](gui_server.html) to provide those views.
+## For the UI, uses:
+##
+##  * [gui_client](gui_client.html) for client request
+##  * [gui_netlog](gui_netlog.html) for network log.
 ##
 ## Copyright 2020 Ken Bannister
 ##
@@ -93,10 +95,14 @@ proc main(conf: CotelConf) =
   let context = igCreateContext()
   assert igGlfwInitForOpenGL(w, true)
   assert igOpenGL3Init()
-
+  
+  let io = igGetIO()
+  # Not using keyboard nav; as is it doesn't mark a listbox item as selected.
+  # seems like a bug to require manual cast of NavEnableKeyboard
+  #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
   igStyleColorsClassic()
 
-  let fAtlas = igGetIO().fonts
+  let fAtlas = io.fonts
   discard addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 16)
 
   var loopCount = 0
