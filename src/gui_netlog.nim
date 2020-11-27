@@ -40,10 +40,12 @@ var
 proc initNetworkLog*() =
   ## Initializes network log infrastructure. Call at app startup.
   var f: File
-  if not open(f, "net.log"):
-    oplog.log(lvlError, "Unable to open net.log")
-    return
-  logPos = f.getFileSize()
+  if open(f, "net.log"):
+    logPos = f.getFileSize()
+    f.close()
+  else:
+    # log may not be initialized yet
+    logPos = 0
 
 proc checkNetworkLog*() =
   ## Updates contents of UI widget from notification of new log entries in
