@@ -6,7 +6,8 @@
 ## For the UI, uses:
 ##
 ##  * [gui_client](gui_client.html) for client request
-##  * [gui_netlog](gui_netlog.html) for network log.
+##  * [gui_local_server](gui_local_server.html) for local server setup
+##  * [gui_netlog](gui_netlog.html) for network log
 ##
 ## Copyright 2020 Ken Bannister
 ##
@@ -14,8 +15,8 @@
 
 import imgui, imgui/[impl_opengl, impl_glfw]
 import nimgl/[opengl, glfw]
-import logging, tables, threadpool, parseOpt
-import conet, gui_util, gui_client, gui_netlog
+import json, logging, tables, threadpool, parseOpt
+import conet, gui_client, gui_local_server, gui_netlog, gui_util
 
 # Disables these warnings for gui_... module imports above. The modules actually
 # *are* used, but code that generates this warning does not realize that.
@@ -24,10 +25,14 @@ import conet, gui_util, gui_client, gui_netlog
 const TICK_FREQUENCY = 30
   ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
 
+var isLocalServerActive = false
+
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
-    if isRequestOpen:
+    if msgTuple.msg.req == "config.server.RESP":
+      gui_local_server.setConfig(to(parseJson(msgTuple.msg.payload), ServerConfig))
+    elif isRequestOpen:
       onNetMsgRequest(msgTuple.msg)
 
 proc renderUi(w: GLFWWindow, width: int32, height: int32) =
@@ -39,12 +44,19 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
 
   if isRequestOpen:
     showRequestWindow()
+  if isLocalServerActive:
+    gui_local_server.showWindow(isLocalServerActive.addr)
   if isNetlogOpen:
     showNetlogWindow()
 
   if igBeginMainMenuBar():
-    if igBeginMenu("Tools"):
+    if igBeginMenu("CoAP"):
       igMenuItem("Client Request", nil, isRequestOpen.addr)
+      if igMenuItem("Local Server", nil, isLocalServerActive.addr):
+        gui_local_server.setPendingOpen()
+        ctxChan.send( CoMsg(req: "config.server.GET") )
+      igEndMenu()
+    if igBeginMenu("Tools"):
       igMenuItem("Network Log", nil, isNetlogOpen.addr)
       igEndMenu()
     igEndMainMenuBar()

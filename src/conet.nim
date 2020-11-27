@@ -40,6 +40,11 @@ import conet_ctx
 export conet_ctx
 
 type
+  ServerConfig* = ref object
+    nosecEnabled*: bool
+    nosecPort*: int
+    nosecListenAddr*: string
+
   ConetState* = ref object
     ## State for Conet; intended only for internal use
     securityMode*: SecurityMode
@@ -208,6 +213,10 @@ proc sendMessage(ctx: CContext, state: ConetState, jsonStr: string) =
 proc netLoop*(state: ConetState) =
   ## Setup server and run event loop
   oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
+
+  var serverConfig = ServerConfig(nosecEnabled: false, nosecPort: 5683,
+                                  nosecListenAddr: "::")
+
   open(netChan)
   open(ctxChan)
   setLogLevel(LOG_DEBUG)
@@ -264,6 +273,9 @@ proc netLoop*(state: ConetState) =
         except CatchableError as e:
           oplog.log(lvlError, e.msg)
           netChan.send( CoMsg(req: "send_msg.error", payload: e.msg) )
+      of "config.server.GET":
+          netChan.send( CoMsg(req: "config.server.RESP",
+                              payload: $(%* serverConfig)) )
       of "quit":
         break
       else:
