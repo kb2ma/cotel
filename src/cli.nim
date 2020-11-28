@@ -25,16 +25,14 @@ proc sendMsg() =
     { "msgType": "NON", "uriPath": "/time",
       "proto": "coap", "remHost": "::1",
       "remPort": 5685 }
-  ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
+  ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
 
 proc main(conf: CotelConf) =
   # Configure CoAP networking and spawn in a new thread
-  let conetState = ConetState(listenAddr: conf.serverAddr,
-                              serverPort: conf.serverPort,
-                              securityMode: conf.securityMode,
-                              pskKey: conf.pskKey, pskClientId: conf.pskClientId)
-  # Start network I/O (see conet.nim)
-  spawn netLoop(conetState)
+  let serverConfig = ServerConfig(listenAddr: conf.serverAddr, nosecEnable: false,
+                                  nosecPort: conf.serverPort, pskKey: conf.pskKey,
+                                  pskClientId: conf.pskClientId)
+  spawn netLoop(serverConfig)
 
   # wait asynchronously for user input
   setStdIoUnbuffered()
@@ -48,7 +46,7 @@ proc main(conf: CotelConf) =
       of "s":
         sendMsg()
       of "q":
-        ctxChan.send( CoMsg(req: "quit") )
+        ctxChan.send( CoMsg(subject: "quit") )
         threadpool.sync()
         break
       stdout.write("cli> ")

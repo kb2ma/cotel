@@ -31,7 +31,10 @@ proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
     if msgTuple.msg.req == "config.server.RESP":
-      gui_local_server.setConfig(to(parseJson(msgTuple.msg.payload), ServerConfig))
+      if msgTuple.msg.token = "local_server.open":
+        gui_local_server.setConfig(to(parseJson(msgTuple.msg.payload), ServerConfig))
+      else:
+        gui_local_server.onConfigUpdate()
     elif isRequestOpen:
       onNetMsgRequest(msgTuple.msg)
 
@@ -54,7 +57,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
       igMenuItem("Client Request", nil, isRequestOpen.addr)
       if igMenuItem("Local Server", nil, isLocalServerActive.addr):
         gui_local_server.setPendingOpen()
-        ctxChan.send( CoMsg(req: "config.server.GET") )
+        ctxChan.send( CoMsg(subject: "config.server.GET" token: "local_server.open") )
       igEndMenu()
     if igBeginMenu("Tools"):
       igMenuItem("Network Log", nil, isNetlogOpen.addr)
@@ -83,11 +86,11 @@ proc main(conf: CotelConf) =
   initNetworkLog()
 
   # Configure CoAP networking and spawn in a new thread
-  let conetState = ConetState(listenAddr: conf.serverAddr,
-                              serverPort: conf.serverPort,
-                              securityMode: conf.securityMode,
-                              pskKey: conf.pskKey, pskClientId: conf.pskClientId)
-  spawn netLoop(conetState)
+  let serverConfig = ServerConfig(listenAddr: conf.serverAddr, nosecEnable: false,
+                                  nosecPort: conf.serverPort, secEnable: false,
+                                  secPort: 0, pskKey: conf.pskKey,
+                                  pskClientId: conf.pskClientId)
+  spawn netLoop(serverConfig)
 
   # GLFW initialization
   assert glfwInit()

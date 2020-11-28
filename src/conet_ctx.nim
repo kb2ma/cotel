@@ -9,7 +9,10 @@ import logging
 type
   CoMsg* = object
     ## A REST-like message for use in a channel with the enclosing context
-    req*: string
+    subject*: string
+    token*: string
+        ## A response to this message must include this token. Provides a
+        ## flexible way to connect messages into a conversation.
     payload*: string
 
   SecurityMode* = enum

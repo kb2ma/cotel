@@ -94,7 +94,8 @@ type
     #response_handler*: pointer
 
   CEndpoint* = ptr object
-    ## libcoap coap_endpoint_t; opaque
+    ## libcoap coap_endpoint_t
+    proto*: CProto
 
   CResource* {.importc: "struct coap_resource_t",
                  header: "<coap2/resource.h>"} = ptr object

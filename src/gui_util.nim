@@ -13,7 +13,8 @@ type
     serverAddr*: string
     serverPort*: int
     securityMode*: SecurityMode
-    pskKey*: seq[char]
+    pskKey*: seq[int]
+      ## uses int rather than char for JSON compatibility
     pskClientId*: string
     windowSize*: seq[int]
 
@@ -47,7 +48,7 @@ proc readConfFile*(confName: string): CotelConf =
     raise newException(ValueError, "security_mode not understood: " & secMode)
 
   # psk_key is a base64 encoded char/byte array
-  result.pskKey = cast[seq[char]](decode(getStr(tsec["psk_key"])))
+  result.pskKey = cast[seq[int]](decode(getStr(tsec["psk_key"])))
 
   # client_id is a text string. Client requests use the same PSK key as the
   # local server.

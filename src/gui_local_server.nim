@@ -12,12 +12,16 @@ var
   isPendingOpen = false
   nosecEnable = false
   nosecPort = 5683'i32
-  nosecListenAddr = "::" & newString(62)
+  listenAddr = "::" & newString(62)
+
+proc onConfigUpdate*() =
+  # display config updated OK
+  discard
 
 proc setConfig*(config: ServerConfig) =
   nosecEnable = config.nosecEnabled
   nosecPort = config.nosecPort.int32
-  nosecListenAddr = config.nosecListenAddr
+  listenAddr = config.listenAddr
   isPendingOpen = false
 
 proc setPendingOpen*() =
@@ -58,18 +62,15 @@ proc showWindow*(isActivePtr: ptr bool) =
   colPos += colWidth + shim*3
   igSameLine(colPos)
   igSetNextItemWidth(250)
-  igInputText("##nosecListenAddr", nosecListenAddr.cstring, 64);
+  igInputText("##listenAddr", listenAddr.cstring, 64);
 
   igItemSize(ImVec2(x:0,y:8))
-  #igSpacing()
+
   if igButton("Make it so"):
-    discard
-    # reset error text for this send
-#[    errText = ""
-    var jNode = %*
-      { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
-        "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-        "remPort": reqPort }
-    ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
-]#
+    let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
+                              nosecPort: nosecPort, secEnable: false,
+                              secPort: 0, pskKey: @[], pskClientId: "")
+    var jNode = %* config
+    ctxChan.send( CoMsg(subject: "config.server.PUT",
+                        token: "local_server.update", payload: (%* config)) )
   igEnd()

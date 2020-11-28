@@ -74,7 +74,7 @@ proc showRequestWindow*() =
       { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
         "remPort": reqPort }
-    ctxChan.send( CoMsg(req: "send_msg", payload: $jNode) )
+    ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
   igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), errText)
