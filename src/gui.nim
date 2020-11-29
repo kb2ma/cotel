@@ -26,17 +26,24 @@ const TICK_FREQUENCY = 30
   ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
 
 var isLocalServerActive = false
+  ## User has selected to show the local server window.
 
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
-    if msgTuple.msg.req == "config.server.RESP":
-      if msgTuple.msg.token = "local_server.open":
-        gui_local_server.setConfig(to(parseJson(msgTuple.msg.payload), ServerConfig))
+    case msgTuple.msg.token
+    of "local_server.open":
+      gui_local_server.setConfig(to(parseJson(msgTuple.msg.payload), ServerConfig))
+    of "local_server.update":
+      if msgTuple.msg.subject == "config.server.RESP":
+        # success
+        gui_local_server.onConfigUpdate(to(parseJson(msgTuple.msg.payload), ServerConfig))
       else:
-        gui_local_server.onConfigUpdate()
-    elif isRequestOpen:
-      onNetMsgRequest(msgTuple.msg)
+        # err
+        discard
+    else:
+      if isRequestOpen:
+        onNetMsgRequest(msgTuple.msg)
 
 proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   ## Renders UI windows/widgets.
@@ -57,7 +64,8 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
       igMenuItem("Client Request", nil, isRequestOpen.addr)
       if igMenuItem("Local Server", nil, isLocalServerActive.addr):
         gui_local_server.setPendingOpen()
-        ctxChan.send( CoMsg(subject: "config.server.GET" token: "local_server.open") )
+        ctxChan.send( CoMsg(subject: "config.server.GET",
+                            token: "local_server.open") )
       igEndMenu()
     if igBeginMenu("Tools"):
       igMenuItem("Network Log", nil, isNetlogOpen.addr)

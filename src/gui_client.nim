@@ -26,11 +26,11 @@ var
   errText = ""
 
 proc onNetMsgRequest*(msg: CoMsg) =
-  if msg.req == "response.payload":
+  if msg.subject == "response.payload":
     let msgJson = parseJson(msg.payload)
     respCode = msgJson["code"].getStr()
     respText = msgJson["payload"].getStr()
-  elif msg.req == "send_msg.error":
+  elif msg.subject == "send_msg.error":
     errText = "Error sending, see log"
 
 proc showRequestWindow*() =
@@ -70,6 +70,7 @@ proc showRequestWindow*() =
   if igButton("Send Req") or isEnterPressed:
     # reset error text for this send
     errText = ""
+    echo("proto " & $protoItems[reqProtoIndex])
     var jNode = %*
       { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,

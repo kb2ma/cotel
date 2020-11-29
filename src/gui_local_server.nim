@@ -1,34 +1,62 @@
-## View to setup and enable a local CoAP server
+## View to setup and enable a local CoAP server. Includes endpoints and
+## security.
 ##
 ## Copyright 2020 Ken Bannister
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
+import json
 import conet
 
+type
+  LocalServerStatus = enum
+    ## Window and editing status
+    STATUS_INIT
+      ## before first use
+    STATUS_PENDING_OPEN
+      ## waiting for config data to display UI
+    STATUS_OPEN
 
 var
-  isPendingOpen = false
+  status = STATUS_INIT
+  statusText = ""
+  config: ServerConfig
+
   nosecEnable = false
   nosecPort = 5683'i32
-  listenAddr = "::" & newString(62)
+  listenAddr = "::" & newString(64)
 
-proc onConfigUpdate*() =
-  # display config updated OK
-  discard
+proc setStatus(status: LocalServerStatus, text: string = "") =
+  gui_local_server.status = status
+  statusText = text
+
+proc updateVars(srcConfig: ServerConfig) =
+  ## Convenience method for common actions when config is updated
+  config = srcConfig
+  nosecEnable = config.nosecEnable
+  nosecPort = config.nosecPort.int32
+  listenAddr = config.listenAddr & newString(64)
+
+proc onConfigUpdate*(config: ServerConfig) =
+  ## Assumes provided config reflects the actual state of conet endpoints. So,
+  ## if the UI requested NoSec to enable, then config.nosecEnable will be true
+  ## here if in fact the server endpoint now is listening.
+  updateVars(config)
+  setStatus(status, "OK")
 
 proc setConfig*(config: ServerConfig) =
-  nosecEnable = config.nosecEnabled
-  nosecPort = config.nosecPort.int32
-  listenAddr = config.listenAddr
-  isPendingOpen = false
+  ## Sets configuration data when opening the window.
+  updateVars(config)
+  setStatus(STATUS_OPEN)
 
 proc setPendingOpen*() =
-  isPendingOpen = true
+  ## Window will be opened; waiting for config data in setConfig()
+  setStatus(STATUS_PENDING_OPEN)
 
 proc showWindow*(isActivePtr: ptr bool) =
-  if isPendingOpen:
+  if status == STATUS_PENDING_OPEN:
+    # don't have config data yet
     return
 
   igSetNextWindowSize(ImVec2(x: 600, y: 300), FirstUseEver)
@@ -58,19 +86,29 @@ proc showWindow*(isActivePtr: ptr bool) =
   colPos += colWidth - shim*2
   igSameLine(colPos)
   igSetNextItemWidth(100)
-  igInputInt("##nosecPort", nosecPort.addr);
+  if config.nosecEnable:
+    igText($nosecPort)
+  else:
+    igInputInt("##nosecPort", nosecPort.addr);
   colPos += colWidth + shim*3
   igSameLine(colPos)
   igSetNextItemWidth(250)
-  igInputText("##listenAddr", listenAddr.cstring, 64);
+  if config.nosecEnable:
+    igText(listenAddr)
+  else:
+    igInputText("##listenAddr", listenAddr.cstring, 64);
 
   igItemSize(ImVec2(x:0,y:8))
 
+  colPos = 0
   if igButton("Make it so"):
     let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
                               nosecPort: nosecPort, secEnable: false,
                               secPort: 0, pskKey: @[], pskClientId: "")
-    var jNode = %* config
     ctxChan.send( CoMsg(subject: "config.server.PUT",
-                        token: "local_server.update", payload: (%* config)) )
+                        token: "local_server.update", payload: $(%* config)) )
+  if statusText != "":
+    colPos += colWidth + shim
+    igSameLine(colPos)
+    igTextColored(ImVec4(x: 0f, y: 1f, z: 0f, w: 1f), statusText)
   igEnd()

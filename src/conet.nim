@@ -41,6 +41,7 @@ export conet_ctx
 
 type
   ServerConfig* = ref object
+    # Configuration data for important aspects of the server
     listenAddr*: string
     nosecEnable*: bool
     nosecPort*: int
@@ -51,8 +52,10 @@ type
     pskClientId*: string
 
   ConetState = ref object
-    context: CContext
+    ## Running state of Conet
+    ctx: CContext
     endpoints: seq[CEndpoint]
+      ## by conventaion, two endpoints: [0] is nosec, [1] is secure
 
   ConetError* = object of CatchableError
     ## Networking error recognized by conet
@@ -151,6 +154,7 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   #init session
   var session: CSession
   if getStr(reqJson["proto"]) == "coaps":
+    echo("coaps request")
     # Assume libcoap retains PSK session, so look for it. Also assume use of
     # local interface 0.
     session = findSession(ctx, address, 0)
@@ -159,7 +163,11 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
                                     config.pskClientId,
                                     cast[ptr uint8](addr config.pskKey[0]),
                                     config.pskKey.len.uint)
+    elif session.proto != COAP_PROTO_DTLS:
+      raise newException(ConetError,
+                         format("Protocol coaps not valid to $#", fmt"{port}"))
   else:
+    echo("coap request")
     # proto must be 'coap'
     session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
   if session == nil:
@@ -210,34 +218,40 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   if send(session, pdu) == COAP_INVALID_TXID:
     deletePdu(pdu)
 
-proc updateConfig(state: ConetState, curConfig: ServerConfig,
-                  newConfig: ServerConfig): bool =
-  if not curConfig.nosecEnable:
-    curConfig.listenAddr = newConfig.listenAddr
-    curConfig.nosecPort = newConfig.nosecPort
+proc updateConfig(state: ConetState, config: ServerConfig,
+                  newConfig: ServerConfig) =
+  ## Starts/Stops local server endpoints based on newConfig.
+  ## Updates the xxxEnable vars to reflect the actual state of the endpoint.
+  ## So if NoSec is enabled, then config.nosecEnable is set true.
+  if state.endpoints[0] == nil:
+    # can only start/change NoSec if not running
+    config.listenAddr = newConfig.listenAddr
+    config.nosecPort = newConfig.nosecPort
     if newConfig.nosecEnable:
-      try:
-        # CoAP server setup
-        var address = create(CSockAddr)
-        resolveAddress(state.ctx, curConfig.listenAddr, $curConfig.nosecPort,
-                       address)
+      # CoAP server setup
+      var address = create(CSockAddr)
+      resolveAddress(state.ctx, config.listenAddr, $config.nosecPort,
+                     address)
 
-        let ep = newEndpoint(state.ctx, address, COAP_PROTO_UDP)
-        if ep == nil:
-          raise newException(ConetError, "Can't create server listening endpoint")
-        state.endpoints[0] = ep
-        oplog.log(lvlInfo, "Cotel server NoSec enabled on " & $config.nosecPort)
+      let ep = newEndpoint(state.ctx, address, COAP_PROTO_UDP)
+      if ep == nil:
+        raise newException(ConetError, "Can't create NoSec server listener")
+      state.endpoints[0] = ep
+      config.nosecEnable = true
+      oplog.log(lvlInfo, "Cotel server NoSec enabled on " & $config.nosecPort)
 
-    else:
-      freeEndpoint(state.endpoints[0])
-      state.endpoints[0] = nil
-      oplog.log(lvlInfo, "Cotel server NoSec disabled")
-  return true
+  elif not newConfig.nosecEnable:
+    # disable NoSec
+    freeEndpoint(state.endpoints[0])
+    state.endpoints[0] = nil
+    config.nosecEnable = false
+    oplog.log(lvlInfo, "Cotel server NoSec disabled")
+
 
 proc netLoop*(config: ServerConfig) =
-  ## Setup server and run event loop
+  ## Entry point for Conet. Setup server and run event loop.
   oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
-  state = ConetState(endpoints: newSeq(CEndpoint,2))
+  let state = ConetState(endpoints: newSeq[CEndpoint](2))
 
   open(netChan)
   open(ctxChan)
@@ -250,9 +264,11 @@ proc netLoop*(config: ServerConfig) =
 
   try:
     if config.pskKey.len > 0:
-      # Must define security context before endpoint
+      # Must define security context before endpoint. Also, the local server
+      # endpoints may not be enabled, but we still need PSK definitions for
+      # client.
       if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
-                       config.pskKey.len.csize_t).bool:
+                           config.pskKey.len.csize_t).bool:
         raise newException(ConetError, "Can't set context PSK")
 
     if config.nosecEnable:
@@ -262,7 +278,7 @@ proc netLoop*(config: ServerConfig) =
 
       let ep = newEndpoint(state.ctx, address, COAP_PROTO_UDP)
       if ep == nil:
-        raise newException(ConetError, "Can't create server listening endpoint")
+        raise newException(ConetError, "Can't enable server NoSec listener")
       state.endpoints[0] = ep
 
     var startupMsg = "Cotel server startup; NoSec "
@@ -276,19 +292,19 @@ proc netLoop*(config: ServerConfig) =
     # response handler.
     var r = initResource(makeStringConst("hi"), 0)
     registerHandler(r, COAP_REQUEST_GET, handleHi)
-    addResource(ctx, r)
-    registerResponseHandler(ctx, handleResponse)
+    addResource(state.ctx, r)
+    registerResponseHandler(state.ctx, handleResponse)
   except CatchableError as e:
     oplog.log(lvlError, e.msg)
     quit(QuitFailure)
 
   # Serve resources until quit
   while true:
-    discard processIo(ctx, 500'u32)
+    discard processIo(state.ctx, 500'u32)
 
     var msgTuple = ctxChan.tryRecv()
     if msgTuple.dataAvailable:
-      case msgTuple.msg.req
+      case msgTuple.msg.subject
       of "send_msg":
         try:
           send_message(state.ctx, config, msgTuple.msg.payload)
@@ -299,14 +315,18 @@ proc netLoop*(config: ServerConfig) =
           netChan.send( CoMsg(subject: "config.server.RESP",
                               token: msgTuple.msg.token, payload: $(%* config)) )
       of "config.server.PUT":
-          discard updateConfig(state, config,
-                               to(parseJson(msgTuple.msg.payload), ServerConfig))
+        try:
+          updateConfig(state, config,
+                       to(parseJson(msgTuple.msg.payload), ServerConfig))
           netChan.send( CoMsg(subject: "config.server.RESP",
-                              token: msgTuple.msg.token) )
+                              token: msgTuple.msg.token, payload: $(%* config)) )
+        except CatchableError as e:
+          oplog.log(lvlError, e.msg)
+          netChan.send( CoMsg(subject: "config.server.ERR", payload: e.msg) )
       of "quit":
         break
       else:
-        oplog.log(lvlError, "msg not understood: " & msgTuple.msg.req)
+        oplog.log(lvlError, "msg not understood: " & msgTuple.msg.subject)
 
   if state.ctx != nil:
     freeContext(state.ctx)
