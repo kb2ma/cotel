@@ -29,6 +29,16 @@ var
   secPort = 5684'i32
   listenAddr = "::" & newString(64)
 
+proc helpMarker(desc: string) =
+  ## Shows marker for help and displays tooltip for provided description.
+  igTextDisabled("(?)")
+  if igIsItemHovered():
+    igBeginTooltip()
+    igPushTextWrapPos(igGetFontSize() * 35.0f);
+    igTextUnformatted(desc);
+    igPopTextWrapPos();
+    igEndTooltip();
+
 proc setStatus(status: LocalServerStatus, text: string = "") =
   gui_local_server.status = status
   statusText = text
@@ -80,6 +90,8 @@ proc showWindow*(isActivePtr: ptr bool) =
   colPos += colWidth
   igSameLine(colPos + shim*3)
   igText("Listen Address")
+  igSameLine()
+  helpMarker("Use :: for IPv6 all interfaces, or 0.0.0.0 for IPv4");
 
   # NoSec
   colPos = 0f
