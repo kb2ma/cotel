@@ -218,24 +218,37 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   if send(session, pdu) == COAP_INVALID_TXID:
     deletePdu(pdu)
 
+proc createEndpoint(ctx: CContext, listenAddr: string, port: int,
+                    proto: CProto): CEndpoint =
+      # CoAP server setup
+      var address = create(CSockAddr)
+      resolveAddress(ctx, listenAddr, $port, address)
+
+      result = newEndpoint(ctx, address, proto)
+      if result == nil:
+        var protoText: string
+        if proto == COAP_PROTO_UDP: protoText = "NoSec" else: protoText = "Secure"
+        raise newException(ConetError, format("Can't create $# server listener on $#",
+                           protoText, $port))
+
 proc updateConfig(state: ConetState, config: ServerConfig,
                   newConfig: ServerConfig) =
   ## Starts/Stops local server endpoints based on newConfig.
   ## Updates the xxxEnable vars to reflect the actual state of the endpoint.
   ## So if NoSec is enabled, then config.nosecEnable is set true.
+
+  if state.endpoints[0] == nil and state.endpoints[1] == nil:
+    # Same listen address used by both protocols, so must not currently be
+    # listening to change it.
+    config.listenAddr = newConfig.listenAddr
+
+  # update for NoSec
   if state.endpoints[0] == nil:
     # can only start/change NoSec if not running
-    config.listenAddr = newConfig.listenAddr
     config.nosecPort = newConfig.nosecPort
     if newConfig.nosecEnable:
-      # CoAP server setup
-      var address = create(CSockAddr)
-      resolveAddress(state.ctx, config.listenAddr, $config.nosecPort,
-                     address)
-
-      let ep = newEndpoint(state.ctx, address, COAP_PROTO_UDP)
-      if ep == nil:
-        raise newException(ConetError, "Can't create NoSec server listener")
+      let ep = createEndpoint(state.ctx, config.listenAddr, config.nosecPort,
+                              COAP_PROTO_UDP)
       state.endpoints[0] = ep
       config.nosecEnable = true
       oplog.log(lvlInfo, "Cotel server NoSec enabled on " & $config.nosecPort)
@@ -246,6 +259,23 @@ proc updateConfig(state: ConetState, config: ServerConfig,
     state.endpoints[0] = nil
     config.nosecEnable = false
     oplog.log(lvlInfo, "Cotel server NoSec disabled")
+
+  # update for Secure
+  if state.endpoints[1] == nil:
+    config.secPort = newConfig.secPort
+    if newConfig.secEnable:
+      let ep = createEndpoint(state.ctx, config.listenAddr, config.secPort,
+                              COAP_PROTO_DTLS)
+      state.endpoints[1] = ep
+      config.secEnable = true
+      oplog.log(lvlInfo, "Cotel server Secure enabled on " & $config.secPort)
+
+  elif not newConfig.secEnable:
+    # disable Secure
+    freeEndpoint(state.endpoints[1])
+    state.endpoints[1] = nil
+    config.secEnable = false
+    oplog.log(lvlInfo, "Cotel server Secure disabled")
 
 
 proc netLoop*(config: ServerConfig) =
@@ -270,23 +300,6 @@ proc netLoop*(config: ServerConfig) =
       if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
                            config.pskKey.len.csize_t).bool:
         raise newException(ConetError, "Can't set context PSK")
-
-    if config.nosecEnable:
-      # CoAP server setup
-      var address = create(CSockAddr)
-      resolveAddress(state.ctx, config.listenAddr, $config.nosecPort, address)
-
-      let ep = newEndpoint(state.ctx, address, COAP_PROTO_UDP)
-      if ep == nil:
-        raise newException(ConetError, "Can't enable server NoSec listener")
-      state.endpoints[0] = ep
-
-    var startupMsg = "Cotel server startup; NoSec "
-    if config.nosecEnable:
-        startupMsg.add(format("enabled on $#", fmt"{config.nosecPort}"))
-    else:
-        startupMsg.add("disabled")
-    oplog.log(lvlInfo, startupMsg)
 
     # Establish server resources and request handlers, and also the client
     # response handler.

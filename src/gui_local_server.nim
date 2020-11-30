@@ -25,6 +25,8 @@ var
 
   nosecEnable = false
   nosecPort = 5683'i32
+  secEnable = false
+  secPort = 5684'i32
   listenAddr = "::" & newString(64)
 
 proc setStatus(status: LocalServerStatus, text: string = "") =
@@ -36,6 +38,8 @@ proc updateVars(srcConfig: ServerConfig) =
   config = srcConfig
   nosecEnable = config.nosecEnable
   nosecPort = config.nosecPort.int32
+  secEnable = config.secEnable
+  secPort = config.secPort.int32
   listenAddr = config.listenAddr & newString(64)
 
 proc onConfigUpdate*(config: ServerConfig) =
@@ -77,7 +81,7 @@ proc showWindow*(isActivePtr: ptr bool) =
   igSameLine(colPos + shim*3)
   igText("Listen Address")
 
-  # nosec
+  # NoSec
   colPos = 0f
   igCheckbox("##nosecEnable", nosecEnable.addr);
   colPos += colWidth - shim
@@ -93,18 +97,35 @@ proc showWindow*(isActivePtr: ptr bool) =
   colPos += colWidth + shim*3
   igSameLine(colPos)
   igSetNextItemWidth(250)
-  if config.nosecEnable:
+  if config.nosecEnable or config.secEnable:
     igText(listenAddr)
   else:
     igInputText("##listenAddr", listenAddr.cstring, 64);
+
+  # Secure
+  colPos = 0f
+  igCheckbox("##secEnable", secEnable.addr);
+  colPos += colWidth - shim
+  igSameLine(colPos)
+  igText("coaps")
+  colPos += colWidth - shim*2
+  igSameLine(colPos)
+  igSetNextItemWidth(100)
+  if config.secEnable:
+    igText($secPort)
+  else:
+    igInputInt("##nosecPort", secPort.addr);
+  colPos += colWidth + shim*3
+  igSameLine(colPos)
+  igText("same")
 
   igItemSize(ImVec2(x:0,y:8))
 
   colPos = 0
   if igButton("Make it so"):
     let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
-                              nosecPort: nosecPort, secEnable: false,
-                              secPort: 0, pskKey: @[], pskClientId: "")
+                              nosecPort: nosecPort, secEnable: secEnable,
+                              secPort: secPort, pskKey: @[], pskClientId: "")
     ctxChan.send( CoMsg(subject: "config.server.PUT",
                         token: "local_server.update", payload: $(%* config)) )
   if statusText != "":

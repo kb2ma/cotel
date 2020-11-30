@@ -11,8 +11,8 @@ type
   CotelConf* = ref object
     ## Configuration data for Cotel app. See src/cotel.conf for details.
     serverAddr*: string
-    serverPort*: int
-    securityMode*: SecurityMode
+    nosecPort*: int
+    secPort*: int
     pskKey*: seq[int]
       ## uses int rather than char for JSON compatibility
     pskClientId*: string
@@ -33,19 +33,11 @@ proc readConfFile*(confName: string): CotelConf =
   let tServ = toml["Server"]
   
   result.serverAddr = getStr(tServ["listen_addr"])
-  result.serverPort = getInt(tServ["port"])
+  result.nosecPort = getInt(tServ["nosecPort"])
+  result.secPort = getInt(tServ["secPort"])
 
   # Security section
   let tSec = toml["Security"]
-
-  let secMode = getStr(tsec["mode"])
-  case secMode
-  of "NoSec":
-    result.securityMode = SECURITY_MODE_NOSEC
-  of "PSK":
-    result.securityMode = SECURITY_MODE_PSK
-  else:
-    raise newException(ValueError, "security_mode not understood: " & secMode)
 
   # psk_key is a base64 encoded char/byte array
   result.pskKey = cast[seq[int]](decode(getStr(tsec["psk_key"])))

@@ -95,8 +95,8 @@ proc main(conf: CotelConf) =
 
   # Configure CoAP networking and spawn in a new thread
   let serverConfig = ServerConfig(listenAddr: conf.serverAddr, nosecEnable: false,
-                                  nosecPort: conf.serverPort, secEnable: false,
-                                  secPort: 0, pskKey: conf.pskKey,
+                                  nosecPort: conf.nosecPort, secEnable: false,
+                                  secPort: conf.secPort, pskKey: conf.pskKey,
                                   pskClientId: conf.pskClientId)
   spawn netLoop(serverConfig)
 
