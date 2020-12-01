@@ -9,6 +9,24 @@
 ##  * [gui_local_server](gui_local_server.html) for local server setup
 ##  * [gui_netlog](gui_netlog.html) for network log
 ##
+## # Conet - GUI Communication
+## Conet operates in its own thread to manage network communication. It
+## communicates with the GUI via two channels, ctxChan and netChan. The use of
+## channels simplies the application by synchronizing memory access across
+## threads.
+##
+## # Application State Setup and Maintenance
+## In general, state is initialized from configuration file properties. A
+## window may allow modification of a property, like NoSec port. If a property
+## is only useful to the GUI, then a window likely maintains the value of the
+## property.
+## 
+## If a property is relevant to Conet networking, then the conet module
+## maintains it. For example several properties of the local server, including
+## NoSec port, may by modified by the gui_local_server window. However, these
+## properties are passed to the conet module to implement and maintain via a
+## ServerConfig object.
+##
 ## Copyright 2020 Ken Bannister
 ##
 ## SPDX-License-Identifier: Apache-2.0
@@ -24,9 +42,6 @@ import conet, gui_client, gui_local_server, gui_netlog, gui_util
 
 const TICK_FREQUENCY = 30
   ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
-
-var isLocalServerActive = false
-  ## User has selected to show the local server window.
 
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
@@ -54,15 +69,18 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
 
   if isRequestOpen:
     showRequestWindow()
-  if isLocalServerActive:
-    gui_local_server.showWindow(isLocalServerActive.addr)
+  if isLocalServerOpen:
+    gui_local_server.showWindow()
   if isNetlogOpen:
     showNetlogWindow()
 
+  # Place menuing setup *below* window setup so menu can set particular window
+  # options when selected. Then make first pass at displaying the window on the
+  # next call to renderUI().
   if igBeginMainMenuBar():
     if igBeginMenu("CoAP"):
       igMenuItem("Client Request", nil, isRequestOpen.addr)
-      if igMenuItem("Local Server", nil, isLocalServerActive.addr):
+      if igMenuItem("Local Server", nil, isLocalServerOpen.addr):
         gui_local_server.setPendingOpen()
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
@@ -129,11 +147,15 @@ proc main(conf: CotelConf) =
   let fAtlas = io.fonts
   discard addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 16)
 
+  # Provides default values for window from config
+  gui_local_server.init(conf.pskFormat)
+
   var loopCount = 0
   while not w.windowShouldClose:
     glfwPollEvents()
+    # Collect latest network data before rendering.
     checkNetChannel()
-    # 
+
     if loopCount >= TICK_FREQUENCY:
       loopCount = 0
       checkNetworkLog()

@@ -263,6 +263,10 @@ proc updateConfig(state: ConetState, config: ServerConfig,
   # update for Secure
   if state.endpoints[1] == nil:
     config.secPort = newConfig.secPort
+    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
+                         config.pskKey.len.csize_t).bool:
+      raise newException(ConetError, "Can't set context PSK")
+
     if newConfig.secEnable:
       let ep = createEndpoint(state.ctx, config.listenAddr, config.secPort,
                               COAP_PROTO_DTLS)
@@ -279,7 +283,8 @@ proc updateConfig(state: ConetState, config: ServerConfig,
 
 
 proc netLoop*(config: ServerConfig) =
-  ## Entry point for Conet. Setup server and run event loop.
+  ## Entry point for Conet. Setup server and run event loop. In particular,
+  ## establishes libcoap Context and server resources.
   oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
   let state = ConetState(endpoints: newSeq[CEndpoint](2))
 
@@ -296,7 +301,7 @@ proc netLoop*(config: ServerConfig) =
     if config.pskKey.len > 0:
       # Must define security context before endpoint. Also, the local server
       # endpoints may not be enabled, but we still need PSK definitions for
-      # client.
+      # a CoAP client.
       if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
                            config.pskKey.len.csize_t).bool:
         raise newException(ConetError, "Can't set context PSK")

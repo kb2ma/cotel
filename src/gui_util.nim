@@ -4,15 +4,23 @@
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
-import base64, logging, parsetoml, sequtils
+import base64, logging, parsetoml, sequtils, strutils
 import conet_ctx
 
+const PSK_KEYLEN_MAX = 16
+
 type
+  PskKeyFormat* = enum
+    FORMAT_BASE64
+    FORMAT_HEX_DIGITS
+    FORMAT_PLAINTEXT
+
   CotelConf* = ref object
     ## Configuration data for Cotel app. See src/cotel.conf for details.
     serverAddr*: string
     nosecPort*: int
     secPort*: int
+    pskFormat*: PskKeyFormat
     pskKey*: seq[int]
       ## uses int rather than char for JSON compatibility
     pskClientId*: string
@@ -39,8 +47,40 @@ proc readConfFile*(confName: string): CotelConf =
   # Security section
   let tSec = toml["Security"]
 
-  # psk_key is a base64 encoded char/byte array
-  result.pskKey = cast[seq[int]](decode(getStr(tsec["psk_key"])))
+  # psk_key is a char/byte array encoded as specified by psk_format.
+  let formatStr = getStr(tSec["psk_format"])
+  let keyStr = getStr(tsec["psk_key"])
+  let keyLen = keyStr.len()
+  case formatStr
+  of "base64":
+    result.pskFormat = FORMAT_BASE64
+    # must decode in two steps instead of direct cast to sec[int]
+    let charKey = @(decode(keyStr))
+    result.pskKey = charKey.map(proc (x:char): int = cast[int](x))
+
+  of "hex":
+    result.pskFormat = FORMAT_HEX_DIGITS
+    if keyLen mod 2 != 0:
+      raise newException(ValueError,
+                         format("psk_key length $# not a multiple of two", $keyLen))
+    let seqLen = (keyLen / 2).int
+    if seqLen > PSK_KEYLEN_MAX:
+      raise newException(ValueError,
+                         format("psk_key length $# longer than 16", $keyLen))
+    result.pskKey = newSeq[int](seqLen)
+    for i in 0 ..< seqLen:
+      result.pskKey[i] = fromHex[int](keyStr.substr(i*2, i*2+1))
+    echo("pskKey seq " & $result.pskKey)
+
+  of "plain":
+    result.pskFormat = FORMAT_PLAINTEXT
+    if keyLen > PSK_KEYLEN_MAX:
+      raise newException(ValueError,
+                         format("psk_key length $# longer than 16", $keyLen))
+    result.pskKey = cast[seq[int]](keyStr)
+  else:
+    raise newException(ValueError,
+                       format("psk_format $# not understood", formatStr))
 
   # client_id is a text string. Client requests use the same PSK key as the
   # local server.

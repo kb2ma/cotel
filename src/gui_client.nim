@@ -12,6 +12,7 @@ import conet
 var
   isRequestOpen* = false
     ## Enclosing context sets this value
+  # must encode as 'var' rather than 'let' to find address for cstring
   protoItems = ["coap".cstring, "coaps".cstring]
   typeItems = ["NON".cstring, "CON".cstring]
 
