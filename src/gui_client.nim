@@ -6,7 +6,7 @@
 
 import imgui
 import json
-import conet
+import conet, gui_util
 
 
 var
@@ -65,10 +65,7 @@ proc showRequestWindow*() =
   igSetNextItemWidth(100)
   discard igCombo("##msgType", reqTypeIndex.addr, typeItems[0].addr, 2)
 
-  let isEnterPressed = igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
-                       igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
-
-  if igButton("Send Req") or isEnterPressed:
+  if igButton("Send Req") or isEnterPressed():
     errText = ""
     respCode = ""
     var jNode = %*

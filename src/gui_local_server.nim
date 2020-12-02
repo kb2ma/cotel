@@ -196,10 +196,7 @@ proc showWindow*() =
 
   igItemSize(ImVec2(x:0,y:8))
 
-  let isEnterPressed = igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
-                       igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
-
-  if igButton("Save/Execute") or isEnterPressed:
+  if igButton("Save/Execute") or isEnterPressed():
     # Convert PSK key to seq[char].
     statusText = ""
     var charSeq: seq[char]

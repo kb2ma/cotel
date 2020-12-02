@@ -5,6 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import base64, logging, parsetoml, sequtils, strutils
+import imgui
 import conet_ctx
 
 const PSK_KEYLEN_MAX* = 16
@@ -87,3 +88,8 @@ proc readConfFile*(confName: string): CotelConf =
   result.windowSize = tGui["window_size"].getElems().mapIt(it.getInt())
 
   oplog.log(lvlInfo, "Conf file read OK")
+
+proc isEnterPressed*():bool =
+  ## Returns true if the enter key has been pressed
+  return igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
+         igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
