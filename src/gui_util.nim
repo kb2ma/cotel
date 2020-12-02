@@ -7,7 +7,7 @@
 import base64, logging, parsetoml, sequtils, strutils
 import conet_ctx
 
-const PSK_KEYLEN_MAX = 16
+const PSK_KEYLEN_MAX* = 16
 
 type
   PskKeyFormat* = enum
@@ -21,8 +21,7 @@ type
     nosecPort*: int
     secPort*: int
     pskFormat*: PskKeyFormat
-    pskKey*: seq[int]
-      ## uses int rather than char for JSON compatibility
+    pskKey*: seq[char]
     pskClientId*: string
     windowSize*: seq[int]
 
@@ -54,9 +53,7 @@ proc readConfFile*(confName: string): CotelConf =
   case formatStr
   of "base64":
     result.pskFormat = FORMAT_BASE64
-    # must decode in two steps instead of direct cast to sec[int]
-    let charKey = @(decode(keyStr))
-    result.pskKey = charKey.map(proc (x:char): int = cast[int](x))
+    result.pskKey = toSeq(decode(keyStr))
 
   of "hex":
     result.pskFormat = FORMAT_HEX_DIGITS
@@ -67,17 +64,16 @@ proc readConfFile*(confName: string): CotelConf =
     if seqLen > PSK_KEYLEN_MAX:
       raise newException(ValueError,
                          format("psk_key length $# longer than 16", $keyLen))
-    result.pskKey = newSeq[int](seqLen)
+    result.pskKey = newSeq[char](seqLen)
     for i in 0 ..< seqLen:
-      result.pskKey[i] = fromHex[int](keyStr.substr(i*2, i*2+1))
-    echo("pskKey seq " & $result.pskKey)
+      result.pskKey[i] = cast[char](fromHex[int](keyStr.substr(i*2, i*2+1)))
 
   of "plain":
     result.pskFormat = FORMAT_PLAINTEXT
     if keyLen > PSK_KEYLEN_MAX:
       raise newException(ValueError,
                          format("psk_key length $# longer than 16", $keyLen))
-    result.pskKey = cast[seq[int]](keyStr)
+    result.pskKey = cast[seq[char]](keyStr)
   else:
     raise newException(ValueError,
                        format("psk_format $# not understood", formatStr))

@@ -69,9 +69,8 @@ proc showRequestWindow*() =
                        igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
 
   if igButton("Send Req") or isEnterPressed:
-    # reset error text for this send
     errText = ""
-    echo("proto " & $protoItems[reqProtoIndex])
+    respCode = ""
     var jNode = %*
       { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,

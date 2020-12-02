@@ -34,7 +34,7 @@ else:
   const posix_AF_INET6 = posix.AF_INET6
 
 import libcoap, nativesockets
-import json, logging, parseutils, sequtils, strformat, strutils
+import json, logging, parseutils, strformat, strutils, std/jsonutils
 import conet_ctx
 # Provides the core context data for conet module users to share
 export conet_ctx
@@ -47,8 +47,7 @@ type
     nosecPort*: int
     secEnable*: bool
     secPort*: int
-    pskKey*: seq[int]
-      ## uses int rather than char for JSON compatibility
+    pskKey*: seq[char]
     pskClientId*: string
 
   ConetState = ref object
@@ -154,16 +153,14 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   #init session
   var session: CSession
   if getStr(reqJson["proto"]) == "coaps":
-    echo("coaps request")
     # Assume libcoap retains PSK session, so look for it. Also assume use of
     # local interface 0.
     session = findSession(ctx, address, 0)
     if session == nil:
-      var charSeq = config.pskKey.map(proc (x:int): char = cast[char](x))
       session = newClientSessionPsk(ctx, nil, address, COAP_PROTO_DTLS,
                                     config.pskClientId,
-                                    cast[ptr uint8](addr charSeq[0]),
-                                    charSeq.len.uint)
+                                    cast[ptr uint8](addr config.pskKey[0]),
+                                    config.pskKey.len.uint)
     elif session.proto != COAP_PROTO_DTLS:
       raise newException(ConetError,
                          format("Protocol coaps not valid to $#", fmt"{port}"))
@@ -264,9 +261,8 @@ proc updateConfig(state: ConetState, config: ServerConfig,
   # update for Secure
   if state.endpoints[1] == nil:
     config.secPort = newConfig.secPort
-    var charSeq = config.pskKey.map(proc (x:int): char = cast[char](x))
-    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr charSeq[0]),
-                         charSeq.len.csize_t).bool:
+    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
+                         config.pskKey.len.csize_t).bool:
       raise newException(ConetError, "Can't set context PSK")
 
     if newConfig.secEnable:
@@ -299,18 +295,9 @@ proc netLoop*(config: ServerConfig) =
   # init context, listen port/endpoint
   state.ctx = newContext(nil)
 
+  # Establish server resources and request handlers, and also the client
+  # response handler.
   try:
-    if config.pskKey.len > 0:
-      # Must define security context before endpoint. Also, the local server
-      # endpoints may not be enabled, but we still need PSK definitions for
-      # a CoAP client.
-      var charSeq = config.pskKey.map(proc (x:int): char = cast[char](x))
-      if not setContextPsk(state.ctx, "", cast[ptr uint8](addr charSeq[0]),
-                           charSeq.len.csize_t).bool:
-        raise newException(ConetError, "Can't set context PSK")
-
-    # Establish server resources and request handlers, and also the client
-    # response handler.
     var r = initResource(makeStringConst("hi"), 0)
     registerHandler(r, COAP_REQUEST_GET, handleHi)
     addResource(state.ctx, r)
@@ -333,14 +320,14 @@ proc netLoop*(config: ServerConfig) =
           oplog.log(lvlError, e.msg)
           netChan.send( CoMsg(subject: "send_msg.error", payload: e.msg) )
       of "config.server.GET":
-          netChan.send( CoMsg(subject: "config.server.RESP",
-                              token: msgTuple.msg.token, payload: $(%* config)) )
+        netChan.send( CoMsg(subject: "config.server.RESP",
+                            token: msgTuple.msg.token, payload: $toJson(config)) )
       of "config.server.PUT":
         try:
           updateConfig(state, config,
-                       to(parseJson(msgTuple.msg.payload), ServerConfig))
+                       jsonTo(parseJson(msgTuple.msg.payload), ServerConfig))
           netChan.send( CoMsg(subject: "config.server.RESP",
-                              token: msgTuple.msg.token, payload: $(%* config)) )
+                              token: msgTuple.msg.token, payload: $toJson(config)) )
         except CatchableError as e:
           oplog.log(lvlError, e.msg)
           netChan.send( CoMsg(subject: "config.server.ERR", payload: e.msg) )

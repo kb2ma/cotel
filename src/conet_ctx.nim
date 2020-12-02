@@ -1,10 +1,13 @@
-## Provides a module for common conet context data for an application that uses
-## its CoAP networking.
+## Provides common data and utilities for an application context to use Conet
+## networking.
+##
+## Includes ability to convert a char to/from JSON, as required by the
+## ServerConfig type for use in a CoMsg.
 ##
 ## Copyright 2020 Ken Bannister
 ##
 ## SPDX-License-Identifier: Apache-2.0
-import logging
+import json, logging, std/jsonutils
 
 type
   CoMsg* = object
@@ -22,11 +25,16 @@ type
 var
   netChan*: Channel[CoMsg]
     ## Communication channel from conet to enclosing context
-    ##
-    ## * send_msg.error: Error sending message; payload is plain text
-    ## * response.payload: Response to request; payload is JSON with 'code'
-    ##   and 'payload'
   ctxChan*: Channel[CoMsg]
     ## Communication channel from enclosing context to conet
   oplog* {.threadvar.}: FileLogger
     ## Logging, which may be initialized on a per-thread basis
+
+
+proc toJsonHook*(c: char): JsonNode =
+  # Marshalls a char to a JSON object
+  return toJson(cast[int](c))
+
+proc fromJsonHook*(a: var char, b: JsonNode) =
+  # Unmarshalls a JSON object to a char
+  a = cast[char](getInt(b))

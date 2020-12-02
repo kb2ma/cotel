@@ -31,9 +31,8 @@
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
-import imgui, imgui/[impl_opengl, impl_glfw]
-import nimgl/[opengl, glfw]
-import json, logging, tables, threadpool, parseOpt
+import imgui, imgui/[impl_opengl, impl_glfw], nimgl/[opengl, glfw]
+import json, logging, tables, threadpool, parseOpt, std/jsonutils
 import conet, gui_client, gui_local_server, gui_netlog, gui_util
 
 # Disables these warnings for gui_... module imports above. The modules actually
@@ -48,11 +47,13 @@ proc checkNetChannel() =
   if msgTuple.dataAvailable:
     case msgTuple.msg.token
     of "local_server.open":
-      gui_local_server.setConfig(to(parseJson(msgTuple.msg.payload), ServerConfig))
+      gui_local_server.setConfig(jsonTo(parseJson(msgTuple.msg.payload),
+                                 ServerConfig))
     of "local_server.update":
       if msgTuple.msg.subject == "config.server.RESP":
         # success
-        gui_local_server.onConfigUpdate(to(parseJson(msgTuple.msg.payload), ServerConfig))
+        gui_local_server.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload),
+                                        ServerConfig))
       else:
         # err
         discard

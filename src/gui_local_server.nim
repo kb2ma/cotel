@@ -6,17 +6,17 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import base64, json, sequtils, strutils
+import base64, json, sequtils, strutils, std/jsonutils
 import conet, gui_util
 
 type
-  LocalServerStatus = enum
+  FormStatus = enum
     ## Window and editing status
     STATUS_INIT
       ## before first use
-    STATUS_PENDING_OPEN
+    STATUS_PENDING_DATA
       ## waiting for config data to display UI
-    STATUS_OPEN
+    STATUS_READY
 
 let headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
   ## dull gold color
@@ -25,22 +25,24 @@ var
   isLocalServerOpen* = false
   status = STATUS_INIT
   statusText = ""
+    ## result of pressing Save/Execute button
   config: ServerConfig
+    ## most recent config received from Conet
   # must encode as 'var' rather than 'let' to find address for cstring
-  formatItems = ["Base64 encoded".cstring, "Hex digits".cstring, "Plain text".cstring]
+  formatItems = ["Base64 encoded".cstring, "Hex digits".cstring,
+                 "Plain text".cstring]
 
   nosecEnable = false
-  nosecPort = 5683'i32
+  nosecPort: int32
   secEnable = false
-  secPort = 5684'i32
-  listenAddr = newStringOfCap(64)
-  pskKey = newStringOfCap(64)
-  pskFormatId = FORMAT_BASE64
-    ## index into PskKeyFormat enum
+  secPort: int32
+  listenAddr: string
+  pskKey: string
+  pskFormatId: PskKeyFormat
 
 proc igInputTextCap(label: string, text: var string, cap: uint): bool =
-  ## Synchronizes the length of the input Nim string text with its cstring as
-  ## it is edited.
+  ## Synchronizes the length property of the input Nim string with its component
+  ## cstring, as it is edited by the ImGui library.
   if igInputText(label, text, cap):
     # disallow length of zero; causes conflict in ImGui
     text.setLen(max(text.cstring.len(), 1))
@@ -57,55 +59,53 @@ proc helpMarker(desc: string) =
     igPopTextWrapPos()
     igEndTooltip()
 
-proc setStatus(status: LocalServerStatus, text: string = "") =
+proc setStatus(status: FormStatus, text: string = "") =
   gui_local_server.status = status
   statusText = text
 
 proc updateVars(srcConfig: ServerConfig) =
-  ## Convenience function for common actions when config is updated
+  ## Performs common actions when config is updated
   config = srcConfig
   nosecEnable = config.nosecEnable
   nosecPort = config.nosecPort.int32
   secEnable = config.secEnable
   secPort = config.secPort.int32
-  # Must have 64 bytes allocated
   listenAddr = newStringOfCap(64)
   listenAddr.add(config.listenAddr)
   pskKey = newStringOfCap(64)
-  # seq[int] to string
+  # seq[char] to string
   case pskFormatId
   of FORMAT_BASE64:
     pskKey.add(encode(srcConfig.pskKey))
   of FORMAT_HEX_DIGITS:
     for i in srcConfig.pskKey:
-      pskKey.add(toHex(i, 2))
+      pskKey.add(toHex(cast[int](i), 2))
   of FORMAT_PLAINTEXT:
     for i in srcConfig.pskKey:
-      pskKey.add(chr(i))
+      pskKey.add(i)
 
 proc onConfigUpdate*(config: ServerConfig) =
-  ## Assumes provided config reflects the actual state of conet endpoints. So,
-  ## if the UI requested NoSec to enable, then config.nosecEnable will be true
-  ## here if in fact the server endpoint now is listening.
+  ## Assumes provided config reflects the actual state of conet server
+  ## endpoints. So, if the UI requested to enable NoSec, then config.nosecEnable
+  ## will be true here if the server endpoint actually is listening now.
   updateVars(config)
   setStatus(status, "OK")
 
 proc setConfig*(config: ServerConfig) =
   ## Sets configuration data when opening the window.
   updateVars(config)
-  setStatus(STATUS_OPEN)
+  setStatus(STATUS_READY)
 
 proc init*(format: PskKeyFormat) =
-  ## One-time initialization.
+  ## One-time initialization
   pskFormatId = format
 
 proc setPendingOpen*() =
   ## Window will be opened; waiting for config data in setConfig()
-  setStatus(STATUS_PENDING_OPEN)
+  setStatus(STATUS_PENDING_DATA)
 
 proc showWindow*() =
-  ## isActivePtr is used by enclosing context
-  if status == STATUS_PENDING_OPEN:
+  if status == STATUS_PENDING_DATA:
     # don't have config data yet
     return
 
@@ -169,7 +169,7 @@ proc showWindow*() =
   igSameLine(colPos)
   igText("same")
 
-  # Security entries
+  # Security section
   igItemSize(ImVec2(x:0,y:8))
   igTextColored(headingColor, "coaps Pre-shared Key")
   colPos = 100f
@@ -180,7 +180,7 @@ proc showWindow*() =
   if config.secEnable:
     igText(formatItems[pskFormatId.int])
   else:
-    # combo requires int32 ptr
+    # combo control requires int32 ptr
     var pskFormatIndex = pskFormatId.int32
     if igCombo("##keyFormat", pskFormatIndex.addr, formatItems[0].addr, 3):
       pskFormatId = cast[PskKeyFormat](pskFormatIndex)
@@ -195,31 +195,47 @@ proc showWindow*() =
     discard igInputTextCap("##pskKey", pskKey, 64)
 
   igItemSize(ImVec2(x:0,y:8))
-  if igButton("Save/Execute"):
-    # Convert PSK key to a seq[int]. Must first convert to seq[char].
-    var intSeq: seq[int]
+
+  let isEnterPressed = igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
+                       igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
+
+  if igButton("Save/Execute") or isEnterPressed:
+    # Convert PSK key to seq[char].
+    statusText = ""
+    var charSeq: seq[char]
     case pskFormatId
     of FORMAT_BASE64:
-      let charSeq = @(decode(pskKey))
-      intSeq = charSeq.map(proc (c:char): int = cast[int](c))
+      charSeq = toSeq(decode(pskKey))
     of FORMAT_HEX_DIGITS:
-      let seqLen = (pskKey.len() / 2).int
-      intSeq = newSeq[int](seqLen)
-      for i in 0 ..< seqLen:
-        intSeq[i] = fromHex[int](pskKey.substr(i*2, i*2+1))
+      if pskKey.len() mod 2 != 0:
+        statusText = "Key length $# not a multiple of two"
+      else:
+        let seqLen = (pskKey.len() / 2).int
+        if seqLen > PSK_KEYLEN_MAX:
+          statusText = format("Key length $# longer than 16", $seqLen)
+        charSeq = newSeq[char](seqLen)
+        for i in 0 ..< seqLen:
+          charSeq[i] = cast[char](fromHex[int](pskKey.substr(i*2, i*2+1)))
     of FORMAT_PLAINTEXT:
-      let charSeq = @pskKey
-      intSeq = charSeq.map(proc (c:char): int = cast[int](c))
-    echo("pskKey seq " & $intSeq)
+      if pskKey.len() > PSK_KEYLEN_MAX:
+        statusText = format("Key length $# longer than 16", $pskKey.len())
+      else:
+        charSeq = cast[seq[char]](pskKey)
 
-    let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
-                              nosecPort: nosecPort, secEnable: secEnable,
-                              secPort: secPort, pskKey: intSeq, pskClientId: "")
-    ctxChan.send( CoMsg(subject: "config.server.PUT",
-                        token: "local_server.update", payload: $(%* config)) )
-    statusText = ""
+    if statusText == "":
+      let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
+                                nosecPort: nosecPort, secEnable: secEnable,
+                                secPort: secPort, pskKey: charSeq, pskClientId: "")
+      ctxChan.send( CoMsg(subject: "config.server.PUT",
+                          token: "local_server.update", payload: $toJson(config)) )
 
   if statusText != "":
     igSameLine(120)
-    igTextColored(ImVec4(x: 0f, y: 1f, z: 0f, w: 1f), statusText)
+    var textColor: ImVec4
+    if statusText == "OK":
+      textColor = ImVec4(x: 0f, y: 1f, z: 0f, w: 1f)
+    else:
+      # red for error
+      textColor = ImVec4(x: 1f, y: 0f, z: 0f, w: 1f)
+    igTextColored(textColor, statusText)
   igEnd()
