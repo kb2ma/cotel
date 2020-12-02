@@ -34,7 +34,7 @@ else:
   const posix_AF_INET6 = posix.AF_INET6
 
 import libcoap, nativesockets
-import json, logging, parseutils, strformat, strutils
+import json, logging, parseutils, sequtils, strformat, strutils
 import conet_ctx
 # Provides the core context data for conet module users to share
 export conet_ctx
@@ -159,10 +159,11 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
     # local interface 0.
     session = findSession(ctx, address, 0)
     if session == nil:
+      var charSeq = config.pskKey.map(proc (x:int): char = cast[char](x))
       session = newClientSessionPsk(ctx, nil, address, COAP_PROTO_DTLS,
                                     config.pskClientId,
-                                    cast[ptr uint8](addr config.pskKey[0]),
-                                    config.pskKey.len.uint)
+                                    cast[ptr uint8](addr charSeq[0]),
+                                    charSeq.len.uint)
     elif session.proto != COAP_PROTO_DTLS:
       raise newException(ConetError,
                          format("Protocol coaps not valid to $#", fmt"{port}"))
@@ -263,8 +264,9 @@ proc updateConfig(state: ConetState, config: ServerConfig,
   # update for Secure
   if state.endpoints[1] == nil:
     config.secPort = newConfig.secPort
-    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
-                         config.pskKey.len.csize_t).bool:
+    var charSeq = config.pskKey.map(proc (x:int): char = cast[char](x))
+    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr charSeq[0]),
+                         charSeq.len.csize_t).bool:
       raise newException(ConetError, "Can't set context PSK")
 
     if newConfig.secEnable:
@@ -302,8 +304,9 @@ proc netLoop*(config: ServerConfig) =
       # Must define security context before endpoint. Also, the local server
       # endpoints may not be enabled, but we still need PSK definitions for
       # a CoAP client.
-      if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
-                           config.pskKey.len.csize_t).bool:
+      var charSeq = config.pskKey.map(proc (x:int): char = cast[char](x))
+      if not setContextPsk(state.ctx, "", cast[ptr uint8](addr charSeq[0]),
+                           charSeq.len.csize_t).bool:
         raise newException(ConetError, "Can't set context PSK")
 
     # Establish server resources and request handlers, and also the client
