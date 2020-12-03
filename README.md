@@ -1,6 +1,4 @@
-Cotel provides a GUI for exploration of CoAP messaging.
-
-The current release is v0.1, which includes these features:
+Cotel provides a GUI for exploration of CoAP messaging. The current release is v0.1, which includes these features:
 
 * Client GET method
 * Server with a simple read-only resource
@@ -9,7 +7,9 @@ The current release is v0.1, which includes these features:
 
 See a [screenshot](./doc/screenshot.png) with all of the application windows open.
 
-Cotel is written with Nim, so it should work on Linux, Mac, and Windows. We have tested only with Ubuntu Linux. Cotel uses libcoap for CoAP messaging, and Dear ImGui for its UI library.
+Cotel runs as a native executable, and is known to work on Ubuntu Linux. Presently you must build from source, as described below. It also should be possible to build for Mac and Windows, but we have not tried this yet.
+
+Cotel uses libcoap for CoAP messaging, and Dear ImGui for its UI library.
 
 # Development
 
