@@ -55,37 +55,39 @@ proc checkNetworkLog*() =
     oplog.log(lvlError, "Unable to open net.log")
     return
 
-  let pos = f.getFileSize()
-  if pos > logPos:
-    # add new lines to logLines
-    f.setFilePos(logPos)
-    var lineText: string
-    var startLen = logLines.len()
-    while true:
-      if not f.readLine(lineText):
-        break
-      logLines.add(lineText)
-    logPos = pos
+  try:
+    let pos = f.getFileSize()
+    if pos > logPos:
+      # add new lines to logLines
+      f.setFilePos(logPos)
+      var lineText: string
+      var startLen = logLines.len()
+      while true:
+        if not f.readLine(lineText):
+          break
+        logLines.add(lineText)
+      logPos = pos
 
-    # update guiLines with new lines
-    var newLen = logLines.len()
-    if newLen > startLen:
-      # resize logLines if beyond line buffer limit
-      if newLen >= (LOG_LINES_MAX + BUFFER_LINES_MAX):
-        logLines.delete(0, newLen - LOG_LINES_MAX - 1)
-        startLen = 0
-        newLen = LOG_LINES_MAX
-        oplog.log(lvlDebug, "Downsized line array")
-      # only show most recent lines up to max
-      let firstLine = max(newLen - LOG_LINES_MAX, 0).int32
-      #echo(format("startLen $#, newLen $# (of $#), firstLine $#" % [fmt"{startLen}",
-      #            fmt"{newLen}", fmt"{logLines.len()}", fmt"{firstLine}"]))
+      # update guiLines with new lines
+      var newLen = logLines.len()
+      if newLen > startLen:
+        # resize logLines if beyond line buffer limit
+        if newLen >= (LOG_LINES_MAX + BUFFER_LINES_MAX):
+          logLines.delete(0, newLen - LOG_LINES_MAX - 1)
+          startLen = 0
+          newLen = LOG_LINES_MAX
+          oplog.log(lvlDebug, "Downsized line array")
+        # only show most recent lines up to max
+        let firstLine = max(newLen - LOG_LINES_MAX, 0).int32
+        #echo(format("startLen $#, newLen $# (of $#), firstLine $#" % [fmt"{startLen}",
+        #            fmt"{newLen}", fmt"{logLines.len()}", fmt"{firstLine}"]))
 
-      guiLen = min(newLen, LOG_LINES_MAX)
-      for i in 0 ..< guiLen:
-        guiLines[i] = logLines[firstLine+i]
-        #echo(format("guiLines $#: $#" % [fmt"{i}", fmt"{guiLines[i]}"]))
-  f.close()
+        guiLen = min(newLen, LOG_LINES_MAX)
+        for i in 0 ..< guiLen:
+          guiLines[i] = logLines[firstLine+i]
+          #echo(format("guiLines $#: $#" % [fmt"{i}", fmt"{guiLines[i]}"]))
+  finally:
+    f.close()
 
 
 proc showNetlogWindow*() =
