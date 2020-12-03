@@ -1,9 +1,9 @@
-Cotel provides a GUI for exploration of CoAP messaging. The current release is v0.1, which includes these features:
+Cotel provides a desktop GUI for exploration of CoAP messaging. The current release is v0.1, which includes these features:
 
 * Client GET method
 * Server with a simple read-only resource
 * PSK security
-* Display of networking log.
+* Display of networking log
 
 See a [screenshot](./doc/screenshot.png) with all of the application windows open.
 
@@ -54,4 +54,4 @@ Install the generated `cotel` executable, the `cotel.conf` configuration file, a
 `cotel.conf` uses reasonable property defaults, but please review its contents for specifics.
 
 ## Hacking
-If you'd like to add or make improvements to Cotel, see the [architecture](./doc/architecture.md) document to get started. 
+If you'd like to make improvements to Cotel, see the [architecture](./doc/architecture.md) document to get started. 
