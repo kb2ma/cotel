@@ -29,8 +29,8 @@ var
   config: ServerConfig
     ## most recent config received from Conet
   # must encode as 'var' rather than 'let' to find address for cstring
-  formatItems = ["Base64 encoded".cstring, "Hex digits".cstring,
-                 "Plain text".cstring]
+  formatItems = ["base64".cstring, "hex".cstring,
+                 "text".cstring]
 
   nosecEnable = false
   nosecPort: int32
@@ -174,9 +174,21 @@ proc showWindow*() =
   igTextColored(headingColor, "coaps Pre-shared Key")
   colPos = 100f
 
-  igText("Key format")
-  igSameLine(colPos)
-  igSetNextItemWidth(150)
+  igText("Key")
+  if config.secEnable:
+    igSameLine(60)
+  else:
+    igSameLine()
+    helpMarker("Decoded key may be up to 16 bytes long")
+    igSameLine()
+  igSetNextItemWidth(300)
+  if config.secEnable:
+    igText(pskKey)
+  else:
+    discard igInputTextCap("##pskKey", pskKey, 64)
+
+  igSameLine()
+  igSetNextItemWidth(80)
   if config.secEnable:
     igText(formatItems[pskFormatId.int])
   else:
@@ -184,17 +196,10 @@ proc showWindow*() =
     var pskFormatIndex = pskFormatId.int32
     if igCombo("##keyFormat", pskFormatIndex.addr, formatItems[0].addr, 3):
       pskFormatId = cast[PskKeyFormat](pskFormatIndex)
+    igSameLine()
+    helpMarker("format for key")
 
-  igText("Key")
-  igSameLine()
-  helpMarker("Decoded key may be up to 16 bytes long")
-  igSameLine(colPos)
-  if config.secEnable:
-    igText(pskKey)
-  else:
-    discard igInputTextCap("##pskKey", pskKey, 64)
-
-  igItemSize(ImVec2(x:0,y:8))
+  igItemSize(ImVec2(x:0,y:12))
 
   if igButton("Save/Execute") or isEnterPressed():
     # Convert PSK key to seq[char].
