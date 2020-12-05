@@ -165,7 +165,6 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
       raise newException(ConetError,
                          format("Protocol coaps not valid to $#", fmt"{port}"))
   else:
-    echo("coap request")
     # proto must be 'coap'
     session = newClientSession(ctx, nil, address, COAP_PROTO_UDP)
   if session == nil:
@@ -261,9 +260,10 @@ proc updateConfig(state: ConetState, config: ServerConfig,
   # update for Secure
   if state.endpoints[1] == nil:
     config.secPort = newConfig.secPort
-    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
-                         config.pskKey.len.csize_t).bool:
+    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr newConfig.pskKey[0]),
+                         newConfig.pskKey.len.csize_t).bool:
       raise newException(ConetError, "Can't set context PSK")
+    config.pskKey = newConfig.pskKey
 
     if newConfig.secEnable:
       let ep = createEndpoint(state.ctx, config.listenAddr, config.secPort,

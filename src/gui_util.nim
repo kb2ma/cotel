@@ -12,9 +12,9 @@ const PSK_KEYLEN_MAX* = 16
 
 type
   PskKeyFormat* = enum
-    FORMAT_BASE64
     FORMAT_HEX_DIGITS
     FORMAT_PLAINTEXT
+    FORMAT_BASE64
 
   CotelConf* = ref object
     ## Configuration data for Cotel app. See src/cotel.conf for details.
@@ -88,6 +88,20 @@ proc readConfFile*(confName: string): CotelConf =
   result.windowSize = tGui["window_size"].getElems().mapIt(it.getInt())
 
   oplog.log(lvlInfo, "Conf file read OK")
+
+proc igComboString*(label: string, currentIndex: var int,
+                   strList: openArray[string]): bool =
+  ## Combo box to display a list of strings.
+  result = false
+  if igBeginCombo(label, strList[currentIndex]):
+    for i in 0 ..< len(strList):
+      var isSelected = (i == currentIndex)
+      if igSelectable(strList[i], isSelected.addr):
+        currentIndex = i
+      if isSelected:
+        igSetItemDefaultFocus()
+        result = true
+    igEndCombo()
 
 proc igInputTextCap*(label: string, text: var string, cap: uint): bool =
   ## Synchronizes the length property of the input Nim string with its component

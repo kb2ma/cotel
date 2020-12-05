@@ -18,8 +18,10 @@ type
       ## waiting for config data to display UI
     STATUS_READY
 
-let headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
-  ## dull gold color
+let
+  headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
+    ## dull gold color
+  formatItems = ["hex", "text", "base64"]
 
 var
   isLocalServerOpen* = false
@@ -29,8 +31,6 @@ var
   config: ServerConfig
     ## most recent config received from Conet
   # must encode as 'var' rather than 'let' to find address for cstring
-  formatItems = ["base64".cstring, "hex".cstring,
-                 "text".cstring]
 
   nosecEnable = false
   nosecPort: int32
@@ -183,9 +183,8 @@ proc showWindow*() =
   if config.secEnable:
     igText(formatItems[pskFormatId.int])
   else:
-    # combo control requires int32 ptr
-    var pskFormatIndex = pskFormatId.int32
-    if igCombo("##keyFormat", pskFormatIndex.addr, formatItems[0].addr, 3):
+    var pskFormatIndex = pskFormatId.int
+    if igComboString("##keyFormat", pskFormatIndex, formatItems):
       pskFormatId = cast[PskKeyFormat](pskFormatIndex)
     igSameLine()
     helpMarker("format for key")
@@ -197,8 +196,6 @@ proc showWindow*() =
     statusText = ""
     var charSeq: seq[char]
     case pskFormatId
-    of FORMAT_BASE64:
-      charSeq = toSeq(decode(pskKey))
     of FORMAT_HEX_DIGITS:
       if pskKey.len() mod 2 != 0:
         statusText = "Key length $# not a multiple of two"
@@ -214,6 +211,8 @@ proc showWindow*() =
         statusText = format("Key length $# longer than 16", $pskKey.len())
       else:
         charSeq = cast[seq[char]](pskKey)
+    of FORMAT_BASE64:
+      charSeq = toSeq(decode(pskKey))
 
     if statusText == "":
       let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
