@@ -40,15 +40,6 @@ var
   pskKey: string
   pskFormatId: PskKeyFormat
 
-proc igInputTextCap(label: string, text: var string, cap: uint): bool =
-  ## Synchronizes the length property of the input Nim string with its component
-  ## cstring, as it is edited by the ImGui library.
-  if igInputText(label, text, cap):
-    # disallow length of zero; causes conflict in ImGui
-    text.setLen(max(text.cstring.len(), 1))
-    return true
-  return false
-
 proc helpMarker(desc: string) =
   ## Shows marker for help and displays tooltip for provided description.
   igTextDisabled("(?)")

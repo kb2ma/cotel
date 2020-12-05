@@ -89,6 +89,15 @@ proc readConfFile*(confName: string): CotelConf =
 
   oplog.log(lvlInfo, "Conf file read OK")
 
+proc igInputTextCap*(label: string, text: var string, cap: uint): bool =
+  ## Synchronizes the length property of the input Nim string with its component
+  ## cstring, as it is edited by the ImGui library.
+  if igInputText(label, text, cap):
+    # disallow length of zero; causes conflict in ImGui
+    text.setLen(max(text.cstring.len(), 1))
+    return true
+  return false
+
 proc isEnterPressed*():bool =
   ## Returns true if the enter key has been pressed
   return igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
