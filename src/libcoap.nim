@@ -38,8 +38,6 @@ const
 
   COAP_RESPONSE_CODE_205* = ((2 shl 5) or 5).uint8
 
-  COAP_OPTION_URI_PATH* = 11'u16
-
   COAP_INVALID_TXID* = -1.CTxid
   COAP_IO_WAIT* = 0
 
@@ -64,6 +62,29 @@ type
     LOG_INFO,
     LOG_DEBUG,
     COAP_LOG_CIPHERS
+
+  COptionId* = enum
+    ## libcoap COAP_OPTION... constants as an enum
+    OPTION_IF_MATCH =        1, # opaque, 0-8 B
+    OPTION_URI_HOST =        3, # String, 1-255 B
+    OPTION_ETAG =            4, # opaque, 1-8 B
+    OPTION_IF_NONE_MATCH =   5, # empty,  0 B
+    OPTION_OBSERVE =         6, # empty/uint, 0 B/0-3 B
+    OPTION_URI_PORT =        7, # uint, 0-2 B
+    OPTION_LOCATION_PATH =   8, # String, 0-255 B
+    OPTION_URI_PATH =       11, # String, 0-255 B
+    OPTION_CONTENT_FORMAT = 12, # uint, 0-2 B
+    OPTION_MAXAGE =         14, # uint, 0-4 B, default 60 Seconds
+    OPTION_URI_QUERY =      15, # String, 1-255 B
+    OPTION_ACCEPT =         17, # uint, 0-2 B
+    OPTION_LOCATION_QUERY = 20, # String, 0-255 B
+    OPTION_BLOCK2 =         23, # uint, 0-3 B
+    OPTION_BLOCK1 =         27, # uint, 0-3 B
+    OPTION_SIZE2 =          28, # uint, 0-4 B
+    OPTION_PROXY_URI =      35, # String, 1-1034 B
+    OPTION_PROXY_SCHEME =   39, # String, 1-255 B
+    OPTION_SIZE1 =          60, # uint, 0-4 B
+    OPTION_NORESPONSE =    258  # uint, 0-1 B
 
   CSockAddrUnion* {.union} = object
     ## Used only by CSockAddr
@@ -228,6 +249,10 @@ proc initAddress*(address: ptr CSockAddr) {.importc: "coap_address_init".}
 # str.h
 proc makeStringConst*(str: cstring): CStringConst
                      {.importc: "coap_make_str_const".}
+
+# coap_internal.h
+proc encodeVarSafe*(buf: ptr uint8, length: csize_t, value: uint): cuint
+                   {.importc: "coap_encode_var_safe".}
 
 # coap_debug.h
 proc setLogHandler*(handler: CLogHandler) {.importc: "coap_set_log_handler".}

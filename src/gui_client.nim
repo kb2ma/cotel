@@ -10,16 +10,10 @@ import conet, gui_util
 
 type
   NamedId = tuple[id: int, name: string]
-  RequestOption = ref object
-    optType: NamedId
-    # only one of the following is used, based on coapOption
-    valueText: string
-    valueInt: int
 
 let
   protoItems = ["coap", "coaps"]
   typeItems = ["NON", "CON"]
-  optionTypeList = [(id: 12, name: "Content-Format"), (id: 15, name: "Uri-Query")]
   cfList = [(id: 0, name: "text/plain"), (id: 60, name: "app/cbor"),
             (id: 50 , name: "app/json"), (id: 40, name: "app/link-format"),
             (id: 110, name: "app/senml+json"), (id: 112, name: "app/senml+cbor"),
@@ -27,11 +21,13 @@ let
             (id: 42, name: "octet-stream")]
   headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
     ## dull gold color
+  optListHeight = 120f
 
 var
   isRequestOpen* = false
     ## Enclosing context sets this value
   isNewOption = false
+    ## True if editing a new option
 
 # widget contents
 var
@@ -45,7 +41,7 @@ var
   errText = ""
 
   # for options
-  reqOptions = newSeq[RequestOption]()
+  reqOptions = newSeq[MessageOption]()
   optionIndex = -1
     ## active index into reqOptions listbox
   optNameIndex = 0
@@ -53,6 +49,7 @@ var
   cfNameIndex = 0
     ## active index into cfNameItems
   optValue = newString(50)
+  optErrText = ""
 
 
 proc onNetMsgRequest*(msg: CoMsg) =
@@ -63,8 +60,8 @@ proc onNetMsgRequest*(msg: CoMsg) =
   elif msg.subject == "send_msg.error":
     errText = "Error sending, see log"
 
-proc igComboNamedId(label: string, currentIndex: var int,
-                    idList: openArray[NamedId]): bool =
+proc igComboNamedObj[T](label: string, currentIndex: var int,
+                    idList: openArray[T]): bool =
   ## Combo box to display a list of NamedIds, like option types.
   result = false
   if igBeginCombo(label, idList[currentIndex].name):
@@ -76,6 +73,18 @@ proc igComboNamedId(label: string, currentIndex: var int,
         igSetItemDefaultFocus()
         result = true
     igEndCombo()
+
+proc resetContents() =
+  ## Resets many vars to blank/empty state.
+  reqPath = newString(64)
+  reqOptions = newSeq[MessageOption]()
+  optionIndex = -1
+  optNameIndex = 0
+  cfNameIndex = 0
+  optValue = newString(50)
+  optErrText = ""
+  respCode = ""
+  respText = ""
 
 proc showRequestWindow*() =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
@@ -115,7 +124,7 @@ proc showRequestWindow*() =
   igItemSize(ImVec2(x:0,y:8))
   if igCollapsingHeader("Options"):
     igBeginChild("OptListChild",
-                 ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:150))
+                 ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:optListHeight))
     igColumns(2, "optcols", false)
     igSeparator()
     igSetColumnWidth(-1, 150)
@@ -128,10 +137,12 @@ proc showRequestWindow*() =
       let o = reqOptions[i]
       igNextColumn()
       #echo("i, optionIndex " & $i & ", " & $optionIndex)
-      if igSelectable(format("$#($#)##opt$#", o.optType.name, $o.optType.id, $i),
+      if igSelectable(format("$#($#)##opt$#", o.optName, $o.optNum, $i),
           i == optionIndex, ImGuiSelectableFlags.SpanAllColumns):
         optionIndex = i;
-        echo("set optionIndex to " & $optionIndex)
+        optErrText = ""
+        isNewOption = false
+
       igNextColumn()
       if o.valueInt > -1:
         if len(o.valueText) > 0:
@@ -142,45 +153,61 @@ proc showRequestWindow*() =
         igText(o.valueText)
     igEndChild()
 
+    # buttons for option list
     igSameLine()
     igBeginChild("OptButtonsChild",
-                 ImVec2(x:igGetWindowContentRegionWidth() * 0.2f, y:150))
+                 ImVec2(x:igGetWindowContentRegionWidth() * 0.2f, y:optListHeight))
     igItemSize(ImVec2(x:0,y:32))
     if igButton("New"):
       isNewOption = true
+      optionIndex = -1
+      optValue = newString(50)
     if igButton("Delete") and optionIndex >= 0:
       reqOptions.delete(optionIndex)
-      optionIndex = -1
+      #optionIndex = -1
     igEndChild()
 
+    # new option entry
     if isNewOption:
       igSetNextItemWidth(140)
-      discard igComboNamedId("##optName", optNameIndex, optionTypeList)
+      discard igComboNamedObj[OptionType]("##optName", optNameIndex, optionTypes)
       igSameLine()
       igSetNextItemWidth(150)
-      case optNameIndex
-      of 0:
-        discard igComboNamedId("##optValue", cfNameIndex, cfList)
+      let optType = optionTypes[optNameIndex]
+      case optType.id
+      of OPTION_CONTENT_FORMAT.int:
+        discard igComboNamedObj[NamedId]("##optValue", cfNameIndex, cfList)
       else:
         discard igInputTextCap("##optValue", optValue, 20)
 
       igSameLine(350)
       if igButton("OK") or (isEnterPressed() and not isEnterHandled):
-        var reqOption = RequestOption(optType: optionTypeList[optNameIndex])
-        case optNameIndex
-        of 0:
+        optErrText = ""
+        let optDef = optionTypes[optNameIndex]
+        var reqOption = MessageOption(optNum: optDef.id, optName: optDef.name)
+        if optType.id == OPTION_CONTENT_FORMAT.int:
           reqOption.valueInt = cfList[cfNameIndex].id
           reqOption.valueText = cfList[cfNameIndex].name
+        elif optType.dataType == TYPE_UINT:
+          try:
+            reqOption.valueInt = parseInt(optValue)
+          except ValueError:
+            optErrText = "Expected integer value"
         else:
           reqOption.valueInt = -1
           reqOption.valueText = optValue
-        reqOptions.add(reqOption)
+        if optErrText == "":
+          reqOptions.add(reqOption)
         isEnterHandled = true
+        optValue = newString(50)
 
       igSameLine()
       if igButton("Done"):
+        optErrText = ""
         isNewOption = false
 
+      if optErrText != "":
+        igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), optErrText)
 
   igItemSize(ImVec2(x:0,y:8))
   if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
@@ -189,12 +216,16 @@ proc showRequestWindow*() =
     var jNode = %*
       { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-        "remPort": reqPort }
+        "remPort": reqPort, "reqOptions": reqOptions }
     ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
-  igSameLine(120)
-  igSetNextItemWidth(300)
-  igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), errText)
+  igSameLine(340)
+  if igButton("Reset"):
+    resetContents()
+
+  if len(errText) > 0:
+    igSetNextItemWidth(400)
+    igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), errText)
 
   # only display if response available
   if respCode.len > 0:

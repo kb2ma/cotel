@@ -37,9 +37,23 @@ import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils
 import conet_ctx
 # Provides the core context data for conet module users to share
-export conet_ctx
+export conet_ctx, libcoap.COptionId
+
 
 type
+  OptionDataType* = enum
+    ## data type for a CoAP option
+    TYPE_UINT,
+    TYPE_STRING,
+    TYPE_OPAQUE
+
+  OptionType* = tuple
+    id: int
+      # a libcoap COAP_OPTION... const
+    dataType: OptionDataType
+    maxlen: int
+    name: string
+
   ServerConfig* = ref object
     # Configuration data for important aspects of the server
     listenAddr*: string
@@ -58,6 +72,40 @@ type
 
   ConetError* = object of CatchableError
     ## Networking error recognized by conet
+
+  MessageOption* = ref object
+    ## Option in a CoAP message
+    optNum*: int
+    optName*: string
+      # only one of the following is used, based on optNum
+    valueText*: string
+    valueInt*: int
+
+  ValueBuffer = array[0..7, char]
+    ## Holds arbitrary values for encoding/decoding with libcoap
+
+let optionTypes* = [
+  (id: OPTION_ACCEPT.int,         dataType: TYPE_UINT,   maxlen:    2, name: "Accept"),
+  (id: OPTION_BLOCK1.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block1"),
+  (id: OPTION_BLOCK2.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block2"),
+  (id: OPTION_CONTENT_FORMAT.int, dataType: TYPE_UINT,   maxlen:    2, name: "Content-Format"),
+  #(id: OPTION_ETAG.int,           dataType: TYPE_OPAQUE, maxlen:    8, name: "ETag"),
+  #(id: OPTION_IF_MATCH.int,       dataType: TYPE_OPAQUE, maxlen:    8, name: "If-Match"),
+  (id: OPTION_IF_NONE_MATCH.int,  dataType: TYPE_UINT,   maxlen:    1, name: "If-None-Match"),
+  (id: OPTION_LOCATION_PATH.int,  dataType: TYPE_STRING, maxlen:  255, name: "Location-Path"),
+  (id: OPTION_LOCATION_QUERY.int, dataType: TYPE_STRING, maxlen:  255, name: "Location-Query"),
+  (id: OPTION_MAXAGE.int,         dataType: TYPE_UINT,   maxlen:    4, name: "Maxage"),
+  (id: OPTION_NORESPONSE.int,     dataType: TYPE_UINT,   maxlen:    1, name: "Noresponse"),
+  (id: OPTION_OBSERVE.int,        dataType: TYPE_UINT,   maxlen:    3, name: "Observe"),
+  (id: OPTION_PROXY_SCHEME.int,   dataType: TYPE_STRING, maxlen:  255, name: "Proxy-Scheme"),
+  (id: OPTION_PROXY_URI.int,      dataType: TYPE_STRING, maxlen: 1034, name: "Proxy-Uri"),
+  (id: OPTION_SIZE1.int,          dataType: TYPE_UINT,   maxlen:    4, name: "Size1"),
+  (id: OPTION_SIZE2.int,          dataType: TYPE_UINT,   maxlen:    4, name: "Size2"),
+  (id: OPTION_URI_HOST.int,       dataType: TYPE_STRING, maxlen:  255, name: "Uri-Host"),
+  (id: OPTION_URI_PATH.int,       dataType: TYPE_STRING, maxlen:  255, name: "Uri-Path"),
+  (id: OPTION_URI_PORT.int,       dataType: TYPE_UINT,   maxlen:    2, name: "Uri-Port"),
+  (id: OPTION_URI_QUERY.int,      dataType: TYPE_STRING, maxlen:  255, name: "Uri-Query")
+]
 
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -183,23 +231,42 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
     releaseSession(session)
     raise newException(ConetError, "Can't create client PDU")
 
-  # add Uri-Path options
+  # add options
   let uriPath = reqJson["uriPath"].getStr()
   var pos = 0
   var chain: COptlist
 
+  # Uri-Path from path string
   while pos < uriPath.len:
     var token: string
     let plen = parseUntil(uriPath, token, '/', pos)
     #echo("start pos: ", pos, ", token: ", token, " of len ", plen)
     if plen > 0:
-      let optlist = newOptlist(COAP_OPTION_URI_PATH, token.len.csize_t,
+      let optlist = newOptlist(OPTION_URI_PATH.uint16, len(token).csize_t,
                                cast[ptr uint8](token.cstring))
       if optlist == nil:
         raise newException(ConetError, "Can't create option list")
       if not insertOptlist(addr chain, optlist).bool:
         raise newException(ConetError, "Can't add to option chain")
     pos = pos + plen + 1
+    
+  # other options
+  for optJson in reqJson["reqOptions"]:
+    let option = to(optJson, MessageOption)
+    var
+      buf: ValueBuffer
+      optlist: COptlist
+    if option.valueInt > -1:
+      let valLen = encodeVarSafe(cast[ptr uint8](buf.addr), len(buf).csize_t,
+                                 option.valueInt.uint)
+      optlist = newOptlist(option.optNum.uint16, valLen, cast[ptr uint8](buf.addr))
+    else:
+      optlist = newOptlist(option.optNum.uint16, len(option.valueText).csize_t,
+                           cast[ptr uint8](option.valueText.cstring))
+    if optlist == nil:
+      raise newException(ConetError, "Can't create option list")
+    if not insertOptlist(addr chain, optlist).bool:
+      raise newException(ConetError, "Can't add to option chain")
 
   # Path may just be "/". No PDU option in that case.
   if chain == nil and uriPath != "/":
