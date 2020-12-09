@@ -106,12 +106,19 @@ proc igComboString*(label: string, currentIndex: var int,
 proc igInputTextCap*(label: string, text: var string, cap: uint): bool =
   ## Synchronizes the length property of the input Nim string with its component
   ## cstring, as it is edited by the ImGui library.
+  var isEmpty = false
+  
   if len(text) == 0:
-    # Must use minimal length to avoid segmentation fault
+    # Temporarily set Nim string length > 0 for adaptation to C library. If
+    # length is 0, Nim passes a NULL char* as the cstring text buffer, which
+    # causes a segmentation fault in ImGui.
     text.setLen(1)
+    isEmpty = true
   if igInputText(label, text, cap):
     text.setLen(len(text.cstring))
     return true
+  elif isEmpty:
+    text.setLen(0)
   return false
 
 proc isEnterPressed*():bool =

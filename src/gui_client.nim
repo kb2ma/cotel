@@ -13,7 +13,8 @@ type
 
 const
   reqHostCapacity = 64
-  reqPathCapacity = 64
+  reqPathCapacity = 255
+    ## No need to validate user entry for this path length
   optValueCapacity = 1034
     ## Length of the string used to edit option value; the longest possible
     ## option value.
@@ -39,9 +40,9 @@ var
   # widget contents
   reqProtoIndex = 0
   reqPort = 5683'i32
-  reqHost = newString(reqHostCapacity)
+  reqHost = newStringOfCap(reqHostCapacity)
   reqTypeIndex = 0
-  reqPath = newString(reqPathCapacity)
+  reqPath = newStringOfCap(reqPathCapacity)
   respCode = ""
   respText = ""
   errText = ""
@@ -54,7 +55,7 @@ var
     ## active index into optionNameItems
   cfNameIndex = 0
     ## active index into cfNameItems
-  optValue = newString(optValueCapacity)
+  optValue = newStringOfCap(optValueCapacity)
   optErrText = ""
 
 
@@ -87,7 +88,7 @@ proc resetContents() =
   optionIndex = -1
   optNameIndex = 0
   cfNameIndex = 0
-  optValue = newString(optValueCapacity)
+  optValue = newStringofCap(optValueCapacity)
   optErrText = ""
   respCode = ""
   respText = ""
@@ -96,33 +97,48 @@ proc readNewOption(optType: OptionType): MessageOption =
   ## Reads the option type and value for a new user-entered option.
   ## Returns the new option, or nil on the first failure. If nil, also sets
   ## 'optErrText'.
-  var reqOption = MessageOption(optNum: optType.id, typesIndex: optNameIndex)
+  result = MessageOption(optNum: optType.id, typesIndex: optNameIndex)
   if optType.id == OPTION_CONTENT_FORMAT.int:
-    reqOption.valueInt = cfList[cfNameIndex].id
-    reqOption.valueText = cfList[cfNameIndex].name
-  elif optType.dataType == TYPE_UINT:
-    try:
-      reqOption.valueInt = parseInt(optValue)
-    except ValueError:
-      optErrText = "Expecting integer value"
-      return nil
-  elif optType.dataType == TYPE_OPAQUE:
-    reqOption.valueInt = -1
-    if len(optValue) mod 2 != 0:
-      optErrText = "Expecting hex digits, but length not multiple of two"
-      return nil
-    let seqLen = (len(optValue) / 2).int
-    reqOption.valueChars = newSeq[char](seqLen)
-    try:
-      for i in 0 ..< seqLen:
-        reqOption.valueChars[i] = cast[char](fromHex[int](optValue.substr(i*2, i*2+1)))
-    except ValueError:
-      optErrText = "Expecting hex digits"
-      return nil
+    result.valueInt = cfList[cfNameIndex].id
+    result.valueText = cfList[cfNameIndex].name
   else:
-    reqOption.valueInt = -1
-    reqOption.valueText = optValue
-  return reqOption
+    if len(optValue) == 0:
+      optErrText = "Empty value"
+      return nil
+    elif optType.dataType == TYPE_UINT:
+      try:
+        result.valueInt = parseInt(optValue)
+      except ValueError:
+        optErrText = "Expecting integer value"
+        return nil
+      let maxval = 1 shl (optType.maxlen * 8) - 1
+      if result.valueInt > maxval:
+        optErrText = "Value exceeds option maximum " & $maxval
+        return nil
+    elif optType.dataType == TYPE_OPAQUE:
+      result.valueInt = -1
+      if len(optValue) mod 2 != 0:
+        optErrText = "Expecting hex digits, but length not a multiple of two"
+        return nil
+      let seqLen = (len(optValue) / 2).int
+      if seqLen > optType.maxlen:
+        optErrText = format("Byte length $# exceeds option maximum $#", $seqLen,
+                     $optType.maxlen)
+        return nil
+      result.valueChars = newSeq[char](seqLen)
+      try:
+        for i in 0 ..< seqLen:
+          result.valueChars[i] = cast[char](fromHex[int](optValue.substr(i*2, i*2+1)))
+      except ValueError:
+        optErrText = "Expecting hex digits"
+        return nil
+    else:  # TYPE_STRING
+      if len(optValue) > optType.maxlen:
+        optErrText = format("Length $# exceeds option maximum $#", $len(optValue),
+                     $optType.maxlen)
+        return nil
+      result.valueInt = -1
+      result.valueText = optValue
 
 proc showRequestWindow*() =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
@@ -147,12 +163,12 @@ proc showRequestWindow*() =
   igText("Host")
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
-  igInputText("##host", reqHost.cstring, 64);
+  discard igInputTextCap("##host", reqHost, reqHostCapacity)
 
   igText("URI Path")
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
-  igInputText("##path", reqPath.cstring, 64);
+  discard igInputTextCap("##path", reqPath, reqPathCapacity)
 
   igText("Msg Type")
   igSameLine(labelColWidth)
@@ -204,7 +220,7 @@ proc showRequestWindow*() =
     if igButton("New"):
       isNewOption = true
       optionIndex = -1
-      optValue = newString(optValueCapacity)
+      optValue = newStringofCap(optValueCapacity)
     if igButton("Delete") and optionIndex >= 0:
       reqOptions.delete(optionIndex)
       #optionIndex = -1
@@ -230,7 +246,7 @@ proc showRequestWindow*() =
         if reqOption != nil:
           reqOptions.add(reqOption)
           # clear for next entry
-          optValue = newString(optValueCapacity)
+          optValue = newStringOfCap(optValueCapacity)
         isEnterHandled = true
 
       igSameLine()
