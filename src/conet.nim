@@ -54,6 +54,16 @@ type
     maxlen: int
     name: string
 
+  MessageOption* = ref object
+    ## Option in a CoAP message
+    optNum*: int
+    typesIndex*: int
+      ## index into optionTypes array
+    # Only one of the following is used, based on optNum (really, option data type)
+    valueText*: string
+    valueChars*: seq[char]
+    valueInt*: int
+
   ServerConfig* = ref object
     # Configuration data for important aspects of the server
     listenAddr*: string
@@ -73,14 +83,6 @@ type
   ConetError* = object of CatchableError
     ## Networking error recognized by conet
 
-  MessageOption* = ref object
-    ## Option in a CoAP message
-    optNum*: int
-    optName*: string
-      # only one of the following is used, based on optNum
-    valueText*: string
-    valueInt*: int
-
   ValueBuffer = array[0..7, char]
     ## Holds arbitrary values for encoding/decoding with libcoap
 
@@ -89,13 +91,13 @@ let optionTypes* = [
   (id: OPTION_BLOCK1.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block1"),
   (id: OPTION_BLOCK2.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block2"),
   (id: OPTION_CONTENT_FORMAT.int, dataType: TYPE_UINT,   maxlen:    2, name: "Content-Format"),
-  #(id: OPTION_ETAG.int,           dataType: TYPE_OPAQUE, maxlen:    8, name: "ETag"),
-  #(id: OPTION_IF_MATCH.int,       dataType: TYPE_OPAQUE, maxlen:    8, name: "If-Match"),
+  (id: OPTION_ETAG.int,           dataType: TYPE_OPAQUE, maxlen:    8, name: "ETag"),
+  (id: OPTION_IF_MATCH.int,       dataType: TYPE_OPAQUE, maxlen:    8, name: "If-Match"),
   (id: OPTION_IF_NONE_MATCH.int,  dataType: TYPE_UINT,   maxlen:    1, name: "If-None-Match"),
   (id: OPTION_LOCATION_PATH.int,  dataType: TYPE_STRING, maxlen:  255, name: "Location-Path"),
   (id: OPTION_LOCATION_QUERY.int, dataType: TYPE_STRING, maxlen:  255, name: "Location-Query"),
-  (id: OPTION_MAXAGE.int,         dataType: TYPE_UINT,   maxlen:    4, name: "Maxage"),
-  (id: OPTION_NORESPONSE.int,     dataType: TYPE_UINT,   maxlen:    1, name: "Noresponse"),
+  (id: OPTION_MAXAGE.int,         dataType: TYPE_UINT,   maxlen:    4, name: "Max-Age"),
+  (id: OPTION_NORESPONSE.int,     dataType: TYPE_UINT,   maxlen:    1, name: "No-Response"),
   (id: OPTION_OBSERVE.int,        dataType: TYPE_UINT,   maxlen:    3, name: "Observe"),
   (id: OPTION_PROXY_SCHEME.int,   dataType: TYPE_STRING, maxlen:  255, name: "Proxy-Scheme"),
   (id: OPTION_PROXY_URI.int,      dataType: TYPE_STRING, maxlen: 1034, name: "Proxy-Uri"),
@@ -252,7 +254,7 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
     
   # other options
   for optJson in reqJson["reqOptions"]:
-    let option = to(optJson, MessageOption)
+    let option = jsonTo(optJson, MessageOption)
     var
       buf: ValueBuffer
       optlist: COptlist

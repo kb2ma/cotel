@@ -5,11 +5,18 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import json, strutils
+import json, strutils, std/jsonutils
 import conet, gui_util
 
 type
   NamedId = tuple[id: int, name: string]
+
+const
+  reqHostCapacity = 64
+  reqPathCapacity = 64
+  optValueCapacity = 1034
+    ## Length of the string used to edit option value; the longest possible
+    ## option value.
 
 let
   protoItems = ["coap", "coaps"]
@@ -29,13 +36,12 @@ var
   isNewOption = false
     ## True if editing a new option
 
-# widget contents
-var
+  # widget contents
   reqProtoIndex = 0
   reqPort = 5683'i32
-  reqHost = newString(64)
+  reqHost = newString(reqHostCapacity)
   reqTypeIndex = 0
-  reqPath = newString(64)
+  reqPath = newString(reqPathCapacity)
   respCode = ""
   respText = ""
   errText = ""
@@ -48,7 +54,7 @@ var
     ## active index into optionNameItems
   cfNameIndex = 0
     ## active index into cfNameItems
-  optValue = newString(50)
+  optValue = newString(optValueCapacity)
   optErrText = ""
 
 
@@ -76,15 +82,47 @@ proc igComboNamedObj[T](label: string, currentIndex: var int,
 
 proc resetContents() =
   ## Resets many vars to blank/empty state.
-  reqPath = newString(64)
+  reqPath = newString(reqPathCapacity)
   reqOptions = newSeq[MessageOption]()
   optionIndex = -1
   optNameIndex = 0
   cfNameIndex = 0
-  optValue = newString(50)
+  optValue = newString(optValueCapacity)
   optErrText = ""
   respCode = ""
   respText = ""
+
+proc readNewOption(optType: OptionType): MessageOption =
+  ## Reads the option type and value for a new user-entered option.
+  ## Returns the new option, or nil on the first failure. If nil, also sets
+  ## 'optErrText'.
+  var reqOption = MessageOption(optNum: optType.id, typesIndex: optNameIndex)
+  if optType.id == OPTION_CONTENT_FORMAT.int:
+    reqOption.valueInt = cfList[cfNameIndex].id
+    reqOption.valueText = cfList[cfNameIndex].name
+  elif optType.dataType == TYPE_UINT:
+    try:
+      reqOption.valueInt = parseInt(optValue)
+    except ValueError:
+      optErrText = "Expecting integer value"
+      return nil
+  elif optType.dataType == TYPE_OPAQUE:
+    reqOption.valueInt = -1
+    if len(optValue) mod 2 != 0:
+      optErrText = "Expecting hex digits, but length not multiple of two"
+      return nil
+    let seqLen = (len(optValue) / 2).int
+    reqOption.valueChars = newSeq[char](seqLen)
+    try:
+      for i in 0 ..< seqLen:
+        reqOption.valueChars[i] = cast[char](fromHex[int](optValue.substr(i*2, i*2+1)))
+    except ValueError:
+      optErrText = "Expecting hex digits"
+      return nil
+  else:
+    reqOption.valueInt = -1
+    reqOption.valueText = optValue
+  return reqOption
 
 proc showRequestWindow*() =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
@@ -137,8 +175,8 @@ proc showRequestWindow*() =
       let o = reqOptions[i]
       igNextColumn()
       #echo("i, optionIndex " & $i & ", " & $optionIndex)
-      if igSelectable(format("$#($#)##opt$#", o.optName, $o.optNum, $i),
-          i == optionIndex, ImGuiSelectableFlags.SpanAllColumns):
+      if igSelectable(format("$#($#)##opt$#", optionTypes[o.typesIndex].name, $o.optNum, $i),
+                      i == optionIndex, ImGuiSelectableFlags.SpanAllColumns):
         optionIndex = i;
         optErrText = ""
         isNewOption = false
@@ -149,6 +187,11 @@ proc showRequestWindow*() =
           igText(format("$#($#)", o.valueText, $o.valueInt))
         else:
           igText($o.valueInt)
+      elif len(o.valueChars) > 0:
+        var charText: string
+        for i in o.valueChars:
+          charText.add(toHex(cast[int](i), 2))
+        igText(charText)
       else:
         igText(o.valueText)
     igEndChild()
@@ -161,7 +204,7 @@ proc showRequestWindow*() =
     if igButton("New"):
       isNewOption = true
       optionIndex = -1
-      optValue = newString(50)
+      optValue = newString(optValueCapacity)
     if igButton("Delete") and optionIndex >= 0:
       reqOptions.delete(optionIndex)
       #optionIndex = -1
@@ -178,28 +221,17 @@ proc showRequestWindow*() =
       of OPTION_CONTENT_FORMAT.int:
         discard igComboNamedObj[NamedId]("##optValue", cfNameIndex, cfList)
       else:
-        discard igInputTextCap("##optValue", optValue, 20)
+        discard igInputTextCap("##optValue", optValue, optValueCapacity)
 
       igSameLine(350)
       if igButton("OK") or (isEnterPressed() and not isEnterHandled):
         optErrText = ""
-        let optDef = optionTypes[optNameIndex]
-        var reqOption = MessageOption(optNum: optDef.id, optName: optDef.name)
-        if optType.id == OPTION_CONTENT_FORMAT.int:
-          reqOption.valueInt = cfList[cfNameIndex].id
-          reqOption.valueText = cfList[cfNameIndex].name
-        elif optType.dataType == TYPE_UINT:
-          try:
-            reqOption.valueInt = parseInt(optValue)
-          except ValueError:
-            optErrText = "Expected integer value"
-        else:
-          reqOption.valueInt = -1
-          reqOption.valueText = optValue
-        if optErrText == "":
+        let reqOption = readNewOption(optType)
+        if reqOption != nil:
           reqOptions.add(reqOption)
+          # clear for next entry
+          optValue = newString(optValueCapacity)
         isEnterHandled = true
-        optValue = newString(50)
 
       igSameLine()
       if igButton("Done"):
@@ -216,10 +248,10 @@ proc showRequestWindow*() =
     var jNode = %*
       { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-        "remPort": reqPort, "reqOptions": reqOptions }
+        "remPort": reqPort, "reqOptions": toJson(reqOptions) }
     ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
-  igSameLine(340)
+  igSameLine(150)
   if igButton("Reset"):
     resetContents()
 

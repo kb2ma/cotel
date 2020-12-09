@@ -106,9 +106,11 @@ proc igComboString*(label: string, currentIndex: var int,
 proc igInputTextCap*(label: string, text: var string, cap: uint): bool =
   ## Synchronizes the length property of the input Nim string with its component
   ## cstring, as it is edited by the ImGui library.
+  if len(text) == 0:
+    # Must use minimal length to avoid segmentation fault
+    text.setLen(1)
   if igInputText(label, text, cap):
-    # disallow length of zero; causes conflict in ImGui
-    text.setLen(max(text.cstring.len(), 1))
+    text.setLen(len(text.cstring))
     return true
   return false
 
