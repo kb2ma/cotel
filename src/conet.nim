@@ -372,10 +372,6 @@ proc netLoop*(config: ServerConfig) =
   # Establish server resources and request handlers, and also the client
   # response handler.
   try:
-    var r = initResource(makeStringConst("hi"), 0)
-    registerHandler(r, COAP_REQUEST_GET, handleHi)
-    addResource(state.ctx, r)
-
     etsi_plug.initResources(state.ctx)
 
     registerResponseHandler(state.ctx, handleResponse)
