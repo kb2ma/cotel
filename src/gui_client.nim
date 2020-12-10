@@ -18,10 +18,11 @@ const
   optValueCapacity = 1034
     ## Length of the string used to edit option value; the longest possible
     ## option value.
+  payloadCapacity = 64
 
 let
   protoItems = ["coap", "coaps"]
-  typeItems = ["NON", "CON"]
+  methodItems = ["GET", "POST", "PUT", "DELETE"]
   cfList = [(id: 0, name: "text/plain"), (id: 60, name: "app/cbor"),
             (id: 50 , name: "app/json"), (id: 40, name: "app/link-format"),
             (id: 110, name: "app/senml+json"), (id: 112, name: "app/senml+cbor"),
@@ -41,8 +42,10 @@ var
   reqProtoIndex = 0
   reqPort = 5683'i32
   reqHost = newStringOfCap(reqHostCapacity)
-  reqTypeIndex = 0
   reqPath = newStringOfCap(reqPathCapacity)
+  reqMethodIndex = 0
+  reqConfirm = false
+  payload = newStringOfCap(payloadCapacity)
   respCode = ""
   respText = ""
   errText = ""
@@ -63,7 +66,10 @@ proc onNetMsgRequest*(msg: CoMsg) =
   if msg.subject == "response.payload":
     let msgJson = parseJson(msg.payload)
     respCode = msgJson["code"].getStr()
-    respText = msgJson["payload"].getStr()
+    if msgJson.hasKey("payload"):
+      respText = msgJson["payload"].getStr()
+    else:
+      respText = ""
   elif msg.subject == "send_msg.error":
     errText = "Error sending, see log"
 
@@ -89,6 +95,7 @@ proc resetContents() =
   optNameIndex = 0
   cfNameIndex = 0
   optValue = newStringofCap(optValueCapacity)
+  payload = newStringOfCap(payloadCapacity)
   optErrText = ""
   respCode = ""
   respText = ""
@@ -149,6 +156,7 @@ proc showRequestWindow*() =
   igBegin("Request", isRequestOpen.addr)
   let labelColWidth = 90f
 
+  igAlignTextToFramePadding()
   igText("Protocol")
   igSameLine(labelColWidth)
   igSetNextItemWidth(100)
@@ -160,20 +168,29 @@ proc showRequestWindow*() =
   igSetNextItemWidth(100)
   igInputInt("##port", reqPort.addr);
 
+  igAlignTextToFramePadding()
   igText("Host")
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
   discard igInputTextCap("##host", reqHost, reqHostCapacity)
 
+  igAlignTextToFramePadding()
   igText("URI Path")
   igSameLine(labelColWidth)
   igSetNextItemWidth(300)
   discard igInputTextCap("##path", reqPath, reqPathCapacity)
 
-  igText("Msg Type")
+  igAlignTextToFramePadding()
+  igText("Method")
   igSameLine(labelColWidth)
   igSetNextItemWidth(100)
-  discard igComboString("##msgType", reqTypeIndex, typeItems)
+  if igComboString("##method", reqMethodIndex, methodItems):
+    if reqMethodIndex == 0:  # GET
+      payload = newStringOfCap(payloadCapacity)
+
+  igSameLine(220)
+  igSetNextItemWidth(100)
+  igCheckbox("Confirm", reqConfirm.addr)
 
   igItemSize(ImVec2(x:0,y:8))
   if igCollapsingHeader("Options"):
@@ -257,14 +274,25 @@ proc showRequestWindow*() =
       if optErrText != "":
         igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), optErrText)
 
+  if reqMethodIndex == 1 or reqMethodIndex == 2:
+    # Include payload for POST or PUT
+    igText("Payload")
+    igSetNextItemWidth(400)
+    discard igInputTextCap("##payload", payload, payloadCapacity,
+                           ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 2),
+                           Multiline)
+
   igItemSize(ImVec2(x:0,y:8))
   if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
     errText = ""
     respCode = ""
+    var msgType: string
+    if reqConfirm: msgType = "CON" else: msgType = "NON"
     var jNode = %*
-      { "msgType": $typeItems[reqTypeIndex], "uriPath": $reqPath.cstring,
+      { "msgType": msgType, "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-        "remPort": reqPort, "reqOptions": toJson(reqOptions) }
+        "remPort": reqPort, "method": reqMethodIndex+1,
+        "reqOptions": toJson(reqOptions), "payload": payload }
     ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
   igSameLine(150)

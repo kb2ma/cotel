@@ -22,20 +22,18 @@ when useWinVersion:
   # copy values from posix if not defined in winlean
   const posix_AF_UNSPEC = winlean.AF_UNSPEC
   const posix_SOCK_DGRAM = cint(2)
-  const posix_AI_NUMERICHOST = cint(4)
   const posix_AF_INET = winlean.AF_INET
   const posix_AF_INET6 = winlean.AF_INET6
 else:
   import posix
   const posix_AF_UNSPEC = posix.AF_UNSPEC
   const posix_SOCK_DGRAM = posix.SOCK_DGRAM
-  const posix_AI_NUMERICHOST = posix.AI_NUMERICHOST
   const posix_AF_INET = posix.AF_INET
   const posix_AF_INET6 = posix.AF_INET6
 
 import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils
-import conet_ctx
+import conet_ctx, etsi_plug
 # Provides the core context data for conet module users to share
 export conet_ctx, libcoap.COptionId
 
@@ -130,10 +128,14 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
 
   let codeStr = "$#.$#\n" % [fmt"{received.code shr 5}",
                              fmt"{received.code and 0x1F:>02}"]
-  var dataStr = newString(dataLen)
-  copyMem(addr dataStr[0], dataPtr, dataLen)
-
-  let jNode = %* { "code": codeStr, "payload": dataStr }
+  var jNode: JsonNode
+  
+  if dataLen > 0:
+    var dataStr = newString(dataLen)
+    copyMem(addr dataStr[0], dataPtr, dataLen)
+    jNode = %* { "code": codeStr, "payload": dataStr }
+  else:
+    jNode = %* { "code": codeStr }
 
   netChan.send( CoMsg(subject: "response.payload", payload: $jNode) )
 
@@ -165,8 +167,7 @@ proc resolveAddress(ctx: CContext, host: string, port: string,
   var hints: AddrInfo
   hints.ai_family = posix_AF_UNSPEC
   hints.ai_socktype = posix_SOCK_DGRAM
-  hints.ai_flags = posix_AI_NUMERICHOST
-  # Use 'info' to iterate linked list, and retain first element in 'firstInfo'.
+  # Use 'info' to iterate over linked list, and retain first element in 'firstInfo'.
   var info, firstInfo: ptr AddrInfo
 
   initAddress(sockAddr)
@@ -227,7 +228,7 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   else:
     msgType = COAP_MESSAGE_NON
 
-  var pdu = initPdu(msgType, COAP_REQUEST_GET.uint8, 1000'u16,
+  var pdu = initPdu(msgType, reqJson["method"].getInt().uint8, 1000'u16,
                     maxSessionPduSize(session))
   if pdu == nil:
     releaseSession(session)
@@ -279,6 +280,10 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
     releaseSession(session)
     raise newException(ConetError, "Can't create option list (3)")
   deleteOptlist(chain)
+
+  if reqJson.hasKey("payload"):
+    let payload = reqJson["payload"].getStr()
+    discard addData(pdu, len(payload).csize_t, payload)
 
   # send
   if send(session, pdu) == COAP_INVALID_TXID:
@@ -370,6 +375,9 @@ proc netLoop*(config: ServerConfig) =
     var r = initResource(makeStringConst("hi"), 0)
     registerHandler(r, COAP_REQUEST_GET, handleHi)
     addResource(state.ctx, r)
+
+    etsi_plug.initResources(state.ctx)
+
     registerResponseHandler(state.ctx, handleResponse)
   except CatchableError as e:
     oplog.log(lvlError, e.msg)

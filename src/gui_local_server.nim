@@ -165,6 +165,7 @@ proc showWindow*() =
   igTextColored(headingColor, "coaps Pre-shared Key")
   colPos = 100f
 
+  igAlignTextToFramePadding()
   igText("Key")
   if config.secEnable:
     igSameLine(60)

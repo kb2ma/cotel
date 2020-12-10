@@ -36,6 +36,7 @@ const
   COAP_MESSAGE_ACK* = 2'u8
   COAP_MESSAGE_RST* = 3'u8
 
+  COAP_RESPONSE_CODE_204* = ((2 shl 5) or 4).uint8
   COAP_RESPONSE_CODE_205* = ((2 shl 5) or 5).uint8
 
   COAP_INVALID_TXID* = -1.CTxid
