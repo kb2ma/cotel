@@ -54,9 +54,11 @@ proc checkNetChannel() =
         # success
         gui_local_server.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload),
                                         ServerConfig))
+      elif msgTuple.msg.subject == "config.server.ERR":
+        gui_local_server.onConfigError(jsonTo(parseJson(msgTuple.msg.payload),
+                                        ServerConfig))
       else:
-        # err
-        discard
+        doAssert(false, "Message not handled: " & msgTuple.msg.subject)
     else:
       if isRequestOpen:
         onNetMsgRequest(msgTuple.msg)

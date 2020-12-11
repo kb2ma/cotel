@@ -82,6 +82,13 @@ proc onConfigUpdate*(config: ServerConfig) =
   updateVars(config)
   setStatus(status, "OK")
 
+proc onConfigError*(config: ServerConfig) =
+  ## Assumes provided config reflects the actual state of conet server
+  ## endpoints. So, if the update failed to enable PSK, then config.secEnable
+  ## will be false here. Point user to the log for details.
+  updateVars(config)
+  setStatus(status, "Error updating; see log")
+
 proc setConfig*(config: ServerConfig) =
   ## Sets configuration data when opening the window.
   updateVars(config)

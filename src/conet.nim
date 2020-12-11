@@ -334,10 +334,14 @@ proc updateConfig(state: ConetState, config: ServerConfig,
   # update for Secure
   if state.endpoints[1] == nil:
     config.secPort = newConfig.secPort
-    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr newConfig.pskKey[0]),
-                         newConfig.pskKey.len.csize_t).bool:
-      raise newException(ConetError, "Can't set context PSK")
+    # Must first assign new key to 'config' in order to generate a stable
+    # address to it for libcoap.
     config.pskKey = newConfig.pskKey
+    if not setContextPsk(state.ctx, "", cast[ptr uint8](addr config.pskKey[0]),
+                         config.pskKey.len.csize_t).bool:
+      # Can't enable; will propagate back to calling context
+      newConfig.secEnable = false
+      raise newException(ConetError, "Can't set context PSK")
 
     if newConfig.secEnable:
       let ep = createEndpoint(state.ctx, config.listenAddr, config.secPort,
@@ -403,7 +407,10 @@ proc netLoop*(config: ServerConfig) =
                               token: msgTuple.msg.token, payload: $toJson(config)) )
         except CatchableError as e:
           oplog.log(lvlError, e.msg)
-          netChan.send( CoMsg(subject: "config.server.ERR", payload: e.msg) )
+          # Return config, which likely was partially updated, so context can
+          # update for it.
+          netChan.send( CoMsg(subject: "config.server.ERR",
+                        token: msgTuple.msg.token, payload: $toJson(config)) )
       of "quit":
         break
       else:
