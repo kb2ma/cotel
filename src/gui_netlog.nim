@@ -15,13 +15,16 @@
 
 import imgui
 import json, logging, math, sequtils
-import conet
+import conet, gui_util
 
 const
   LOG_LINES_MAX = 100
     ## max number of displayable log lines
   BUFFER_LINES_MAX = 30
     ## number of extra log lines used to buffer need to downsize 'guiLines'
+
+let
+  levelItems = ["DEBUG", "INFO", "WARN", "ERROR"]
 
 var
   isNetlogOpen* = false
@@ -36,6 +39,12 @@ var
     ## count of lines in guiLines; less than LOG_LINES_MAX until it fills up
   selectedLine = 0'i32
     ## index of user selected line
+  levelIndex = 0
+    ## selected minimum log level
+  filterChars = cast[seq[char]](@[])
+    ## Characters to filter against when reading new lines in network log. For
+    ## example, if filter includes'D', debug log level messages will be
+    ## excluded from display.
 
 proc initNetworkLog*() =
   ## Initializes network log infrastructure. Call at app startup.
@@ -65,7 +74,10 @@ proc checkNetworkLog*() =
       while true:
         if not f.readLine(lineText):
           break
-        logLines.add(lineText)
+        # We expect a log line includes more than 12 characters, but include it
+        # anyway if not to err on the verbose side.
+        if (len(lineText) < 12) or not filterChars.contains(lineText[11]):
+          logLines.add(lineText)
       logPos = pos
 
       # update guiLines with new lines
@@ -93,9 +105,29 @@ proc checkNetworkLog*() =
 proc showNetlogWindow*() =
   igSetNextWindowSize(ImVec2(x: 500, y: 300), FirstUseEver)
   # fill entire window
-  igPushStyleVar(WindowPadding, ImVec2(x: 0, y: 0))
+  igPushStyleVar(WindowPadding, ImVec2(x: 0, y: 4))
   igBegin("Network Log", isNetlogOpen.addr)
   igPopStyleVar()
+
+  igSameLine(10)
+  igAlignTextToFramePadding()
+  igText("Log Level")
+  igSameLine()
+  igSetNextItemWidth(100)
+  if igComboString("##level", levelIndex, levelItems):
+    filterChars = @[]
+    if levelIndex >= 1:
+      filterChars.add('D')
+    if levelIndex >= 2:
+      filterChars.add('I')
+    if levelIndex >= 3:
+      filterChars.add('W')
+
+  igSameLine(200)
+  if igButton("Clear") or isEnterPressed():
+    logLines = newSeqOfCap[string](LOG_LINES_MAX + BUFFER_LINES_MAX)
+    for i in 0 ..< LOG_LINES_MAX:
+      guiLines[i] = ""
 
   var winSize: ImVec2
   igGetWindowContentRegionMaxNonUDT(winSize.addr)
@@ -106,8 +138,7 @@ proc showNetlogWindow*() =
   # of list box flush with bottom of window, call igListBoxHeader(). In this
   # case must fill in listbox items manually here.
   var heightInItems = winSize.y / igGetTextLineHeightWithSpacing()
-  heightInItems = trunc(heightInItems) - 2
+  heightInItems = trunc(heightInItems) - 4
   igListBox("##netlist", selectedLine.addr, guiLines[0].addr, guiLen.int32,
             heightInItems.int32)
-
   igEnd()
