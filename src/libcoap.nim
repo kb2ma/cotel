@@ -20,6 +20,7 @@ const libName = "libcoap-2.so"
 type
   CProto* = uint8
   ## coap_proto_t
+  COpt = uint8
 
   CTxid* = cint
 
@@ -40,10 +41,13 @@ const
   COAP_RESPONSE_CODE_202* = ((2 shl 5) or 2).uint8
   COAP_RESPONSE_CODE_204* = ((2 shl 5) or 4).uint8
   COAP_RESPONSE_CODE_205* = ((2 shl 5) or 5).uint8
+  COAP_RESPONSE_CODE_400* = ((4 shl 5) or 0).uint8
   COAP_RESPONSE_CODE_404* = ((4 shl 5) or 4).uint8
 
   COAP_INVALID_TXID* = -1.CTxid
   COAP_IO_WAIT* = 0
+  COAP_OPT_FILTER_SIZE = 6
+  COAP_OPT_ALL* = cast[ptr uint16](nil)
 
 type
   CRequestCode* = enum
@@ -145,6 +149,16 @@ type
 
   COptlist* = ptr object
 
+  COptFilter* = array[COAP_OPT_FILTER_SIZE, uint16]
+
+  COptIterator* = ref object
+    length*: csize_t
+    optType*: uint16
+    # flags really is a couple of bit fields, but we don't care
+    flags: cuint
+    next_option: ptr COpt
+    filter: COptFilter
+
   CCoapBinary* = ptr object
 
   CCoapString* {.importc: "struct coap_string_t",
@@ -236,9 +250,23 @@ proc deleteOptlist*(list: COptlist) {.importc: "coap_delete_optlist".}
 
 proc insertOptlist*(chain: ptr COptlist, optlist: COptlist): cint
                    {.importc: "coap_insert_optlist".}
- 
+
 proc newOptlist*(number: uint16, length: csize_t, data: ptr uint8): COptlist
                 {.importc: "coap_new_optlist".}
+
+proc setOptFilterSet*(filter: COptFilter, ftype: uint16): cint
+                     {.importc: "coap_option_filter_set".}
+
+# Must set filter type as below, rather than the filter itself, a uint16 array.
+# The empty filter is defined as NULL; i.e., it treats the array as a pointer.
+proc initOptIterator*(pdu: CPdu, oi: COptIterator, filter: ptr uint16): COptIterator
+                     {.importc: "coap_option_iterator_init".}
+
+proc nextOption*(oi: COptIterator): ptr COpt {.importc: "coap_option_next".}
+
+proc optLength*(opt: ptr COpt): uint16 {.importc: "coap_opt_length".}
+
+proc optValue*(opt: ptr COpt): ptr uint8 {.importc: "coap_opt_value".}
 
 # coap_io.h
 proc processIo*(context: CContext, timeout: uint32): cint

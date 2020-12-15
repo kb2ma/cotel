@@ -30,7 +30,7 @@ proc handleTestGet(context: CContext, resource: CResource, session: CSession,
     # add text/plain Content-Format
     var buf: ValueBuffer
     let valLen = encodeVarSafe(cast[ptr uint8](buf.addr), len(buf).csize_t,
-                               0.uint)
+                               50.uint)
     var optlist = newOptlist(OPTION_CONTENT_FORMAT.uint16, valLen,
                              cast[ptr uint8](buf.addr))
     discard addOptlistPdu(resp, addr optlist)
@@ -43,24 +43,65 @@ proc handleTestGet(context: CContext, resource: CResource, session: CSession,
 proc handleTestPut(context: CContext, resource: CResource, session: CSession,
                    req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
                    {.exportc: "hnd_test_put", noconv.} =
+  ## Expects body with some text string
   if req.`type` == COAP_MESSAGE_CON:
     resp.`type` = COAP_MESSAGE_ACK
   else:
     resp.`type` = COAP_MESSAGE_NON
-  if len(testContents) == 0:
-    resp.code = COAP_RESPONSE_CODE_201  # Created
-  else:
-    resp.code = COAP_RESPONSE_CODE_204  # Changed
 
   var dataLen: csize_t
   var dataPtr: ptr uint8
   discard getData(req, addr dataLen, addr dataPtr)
-  var dataStr = newString(dataLen)
-  copyMem(addr dataStr[0], dataPtr, dataLen)
-  testContents = dataStr
+
+  if dataLen == 0:
+    resp.code = COAP_RESPONSE_CODE_400
+  else:
+    if len(testContents) == 0:
+      resp.code = COAP_RESPONSE_CODE_201  # Created
+    else:
+      resp.code = COAP_RESPONSE_CODE_204  # Changed
+
+    var dataStr = newString(dataLen)
+    copyMem(addr dataStr[0], dataPtr, dataLen)
+    testContents = dataStr
 
   let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
   oplog.log(lvlInfo, format("PUT /test from $#", remote))
+
+proc handleTestPost(context: CContext, resource: CResource, session: CSession,
+                   req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
+                   {.exportc: "hnd_test_post", noconv.} =
+  ## Expects body with some text string
+  if req.`type` == COAP_MESSAGE_CON:
+    resp.`type` = COAP_MESSAGE_ACK
+  else:
+    resp.`type` = COAP_MESSAGE_NON
+
+  var dataLen: csize_t
+  var dataPtr: ptr uint8
+  discard getData(req, addr dataLen, addr dataPtr)
+
+  if dataLen == 0:
+    resp.code = COAP_RESPONSE_CODE_400
+  else:
+    if len(testContents) == 0:
+      resp.code = COAP_RESPONSE_CODE_201  # Created
+    else:
+      resp.code = COAP_RESPONSE_CODE_204  # Changed
+
+    var dataStr = newString(dataLen)
+    copyMem(addr dataStr[0], dataPtr, dataLen)
+    testContents = dataStr
+
+  if resp.code == COAP_RESPONSE_CODE_201:
+    # add Location-Path option
+    var path = "test"
+    var optlist = newOptlist(OPTION_LOCATION_PATH.uint16, len(path).csize_t,
+                             cast[ptr uint8](path[0].addr))
+    discard addOptlistPdu(resp, addr optlist)
+
+  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
+  oplog.log(lvlInfo, format("POST /test from $#", remote))
 
 proc handleTestDelete(context: CContext, resource: CResource, session: CSession,
                    req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -83,5 +124,6 @@ proc initResources*(ctx: CContext) =
   var r = initResource(makeStringConst("test"), 0)
   registerHandler(r, COAP_REQUEST_GET, handleTestGet)
   registerHandler(r, COAP_REQUEST_PUT, handleTestPut)
+  registerHandler(r, COAP_REQUEST_POST, handleTestPost)
   registerHandler(r, COAP_REQUEST_DELETE, handleTestDelete)
   addResource(ctx, r)

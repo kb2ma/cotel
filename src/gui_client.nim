@@ -5,11 +5,8 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import json, strutils, std/jsonutils
+import algorithm, json, strutils, std/jsonutils, tables
 import conet, gui_util
-
-type
-  NamedId = tuple[id: int, name: string]
 
 const
   reqHostCapacity = 64
@@ -20,17 +17,17 @@ const
     ## option value.
   payloadCapacity = 64
 
-let
   protoItems = ["coap", "coaps"]
   methodItems = ["GET", "POST", "PUT", "DELETE"]
-  cfList = [(id: 0, name: "text/plain"), (id: 60, name: "app/cbor"),
-            (id: 50 , name: "app/json"), (id: 40, name: "app/link-format"),
-            (id: 110, name: "app/senml+json"), (id: 112, name: "app/senml+cbor"),
-            (id: 111, name: "app/sensml+json"), (id: 113, name: "app/sensml+cbor"),
-            (id: 42, name: "octet-stream")]
   headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
     ## dull gold color
-  optListHeight = 120f
+  optListHeight = 80f
+
+# Construct sorted list of content format items from the table of those items.
+var cfList = newSeqOfCap[NamedId](len(contentFmtTable))
+for item in contentFmtTable.values:
+  cfList.add(item)
+cfList = sorted(cfList, proc (x, y: NamedId): int = cmp(x.name, y.name))
 
 var
   isRequestOpen* = false
@@ -50,7 +47,7 @@ var
   respText = ""
   errText = ""
 
-  # for options
+  # request options entry
   reqOptions = newSeq[MessageOption]()
   optionIndex = -1
     ## active index into reqOptions listbox
@@ -61,11 +58,19 @@ var
   optValue = newStringOfCap(optValueCapacity)
   optErrText = ""
 
+  # response options
+  respOptions = newSeq[MessageOption]()
+
 
 proc onNetMsgRequest*(msg: CoMsg) =
   if msg.subject == "response.payload":
     let msgJson = parseJson(msg.payload)
     respCode = msgJson["code"].getStr()
+
+    echo("resp options " & $msgJson["options"])
+    for optJson in msgJson["options"]:
+      respOptions.add(jsonTo(optJson, MessageOption))
+
     if msgJson.hasKey("payload"):
       respText = msgJson["payload"].getStr()
     else:
@@ -98,6 +103,7 @@ proc resetContents() =
   payload = newStringOfCap(payloadCapacity)
   optErrText = ""
   respCode = ""
+  respOptions = newSeq[MessageOption]()
   respText = ""
 
 proc readNewOption(optType: OptionType): MessageOption =
@@ -108,6 +114,15 @@ proc readNewOption(optType: OptionType): MessageOption =
   if optType.id == OPTION_CONTENT_FORMAT.int:
     result.valueInt = cfList[cfNameIndex].id
     result.valueText = cfList[cfNameIndex].name
+    #[
+    var i = 0
+    for item in cfTable.values:
+      if i == cfNameIndex:
+        result.valueInt = item.id
+        result.valueText = item.name
+        break
+      i += 1
+    ]#
   else:
     if len(optValue) == 0:
       optErrText = "Empty value"
@@ -156,6 +171,7 @@ proc showRequestWindow*() =
   igBegin("Request", isRequestOpen.addr)
   let labelColWidth = 90f
 
+  # top-level items
   igAlignTextToFramePadding()
   igText("Protocol")
   igSameLine(labelColWidth)
@@ -194,20 +210,26 @@ proc showRequestWindow*() =
 
   igItemSize(ImVec2(x:0,y:8))
   if igCollapsingHeader("Options"):
+    # Must create child to limit length of separator
+    igBeginChild("OptListHeaderChild",
+                 ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:24f))
+    igTextColored(headingColor, "Type")
+    igSameLine(160)
+    igTextColored(headingColor, "Value")
+    igSeparator()
+    igEndChild()
+
+    # Child offsets to right, so must push it left to align
+    igSetCursorPosX(igGetCursorPosX() - 8f)
     igBeginChild("OptListChild",
                  ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:optListHeight))
     igColumns(2, "optcols", false)
-    igSeparator()
     igSetColumnWidth(-1, 150)
-    igTextColored(headingColor, "Type")
-    igNextColumn()
-    igTextColored(headingColor, "Value")
-    igSeparator()
 
     for i in 0 ..< len(reqOptions):
       let o = reqOptions[i]
-      igNextColumn()
-      #echo("i, optionIndex " & $i & ", " & $optionIndex)
+      if i > 0:
+        igNextColumn()
       if igSelectable(format("$#($#)##opt$#", optionTypes[o.typesIndex].name, $o.optNum, $i),
                       i == optionIndex, ImGuiSelectableFlags.SpanAllColumns):
         optionIndex = i;
@@ -233,7 +255,7 @@ proc showRequestWindow*() =
     igSameLine()
     igBeginChild("OptButtonsChild",
                  ImVec2(x:igGetWindowContentRegionWidth() * 0.2f, y:optListHeight))
-    igItemSize(ImVec2(x:0,y:32))
+    igSetCursorPosY(igGetCursorPosY() + 8f)
     if igButton("New"):
       isNewOption = true
       optionIndex = -1
@@ -282,10 +304,12 @@ proc showRequestWindow*() =
                            ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 2),
                            Multiline)
 
-  igItemSize(ImVec2(x:0,y:8))
+  # Send
+  igSetCursorPosY(igGetCursorPosY() + 8f)
   if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
     errText = ""
     respCode = ""
+    respOptions = newSeq[MessageOption]()
     var msgType: string
     if reqConfirm: msgType = "CON" else: msgType = "NON"
     var jNode = %*
@@ -303,14 +327,68 @@ proc showRequestWindow*() =
     igSetNextItemWidth(400)
     igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), errText)
 
-  # only display if response available
-  if respCode.len > 0:
+  # Response, when available
+  if len(respCode) > 0:
+    igSetCursorPosY(igGetCursorPosY() + 8f)
     igSeparator()
-    igTextColored(ImVec4(x: 1f, y: 1f, z: 0f, w: 1f), "Code")
+    igTextColored(ImVec4(x: 1f, y: 1f, z: 0f, w: 1f), "Response")
+    igText("Code")
     igSameLine(labelColWidth)
-    igSetNextItemWidth(500)
+    igSetNextItemWidth(100)
     igText(respCode)
-    igSetNextItemWidth(500)
-    igTextWrapped(respText)
+
+    igSetCursorPosY(igGetCursorPosY() + 8f)
+    if igCollapsingHeader("Options##resp"):
+      # Must create child to limit length of separator
+      igBeginChild("RespOptListHeaderChild",
+                   ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:24f))
+      igTextColored(headingColor, "Type")
+      igSameLine(150)
+      igTextColored(headingColor, "Value")
+      igSeparator()
+      igEndChild()
+
+      # Child offsets to right, so must push it left to align
+      igSetCursorPosX(igGetCursorPosX() - 8f)
+      # Adjust height based on number of items, up to four rows
+      igBeginChild("RespOptListChild",
+                   ImVec2(x:igGetWindowContentRegionWidth() * 0.8f,
+                          y:max(min(20 * len(respOptions), 80), 20).float))
+      igColumns(2, "respOptcols", false)
+      igSetColumnWidth(-1, 150)
+
+      for i in 0 ..< len(respOptions):
+        let o = respOptions[i]
+        let optType = optionTypes[o.typesIndex]
+        if i > 0:
+          igNextColumn()
+        igText(format("$#($#)", optType.name, $o.optNum, $i))
+
+        igNextColumn()
+        #echo("resp opt id " & $optType.id)
+        #echo("resp opt value " & $o.valueInt)
+        case optType.id
+        of OPTION_CONTENT_FORMAT.int:
+          igText(format("$#($#)", contentFmtTable[o.valueInt].name, $o.valueInt))
+        else:
+          if o.valueInt > -1:
+            if len(o.valueText) > 0:
+              igText(format("$#($#)", o.valueText, $o.valueInt))
+            else:
+              igText($o.valueInt)
+          elif len(o.valueChars) > 0:
+            var charText: string
+            for i in o.valueChars:
+              charText.add(toHex(cast[int](i), 2))
+            igText(charText)
+          else:
+            igText(o.valueText)
+      igEndChild()
+
+    if len(respText) > 0:
+      igSeparator()
+      igSetCursorPosY(igGetCursorPosY() + 8f)
+      igSetNextItemWidth(500)
+      igTextWrapped(respText)
 
   igEnd()

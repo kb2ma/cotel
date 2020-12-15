@@ -32,7 +32,7 @@ else:
   const posix_AF_INET6 = posix.AF_INET6
 
 import libcoap, nativesockets
-import json, logging, parseutils, strformat, strutils, std/jsonutils
+import json, logging, parseutils, strformat, strutils, std/jsonutils, tables
 import conet_ctx, etsi_plug
 # Provides the core context data for conet module users to share
 export conet_ctx, libcoap.COptionId
@@ -53,11 +53,14 @@ type
     name: string
 
   MessageOption* = ref object
-    ## Option in a CoAP message
+    ## Option in a CoAP message. Heuristics for value attributes:
+    ## 1. Only one of valueInt, valueChars, valueText is populated.
+    ## 2. valueInt unused if < 0
+    ## 3. valueChars unused if empty
+    ## 4. valueText unused if empty
     optNum*: int
     typesIndex*: int
       ## index into optionTypes array
-    # Only one of the following is used, based on optNum (really, option data type)
     valueText*: string
     valueChars*: seq[char]
     valueInt*: int
@@ -81,10 +84,14 @@ type
   ConetError* = object of CatchableError
     ## Networking error recognized by conet
 
-  ValueBuffer = array[0..7, char]
+  ValueBuffer = array[8, char]
     ## Holds arbitrary values for encoding/decoding with libcoap
 
-let optionTypes* = [
+  NamedId* = object
+    id*: int
+    name*: string
+
+const optionTypes* = [
   (id: OPTION_ACCEPT.int,         dataType: TYPE_UINT,   maxlen:    2, name: "Accept"),
   (id: OPTION_BLOCK1.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block1"),
   (id: OPTION_BLOCK2.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block2"),
@@ -107,6 +114,20 @@ let optionTypes* = [
   (id: OPTION_URI_QUERY.int,      dataType: TYPE_STRING, maxlen:  255, name: "Uri-Query")
 ]
 
+#[
+let optTypesTable = newTable[int, OptionType]
+for optType in optionTypes:
+  optTypesTable.add(optType.id, optType)
+]#
+
+const contentFmtTable* = {
+    0: NamedId(id: 0, name: "text/plain"), 60: NamedId(id: 60, name: "app/cbor"),
+   50: NamedId(id: 50 , name: "app/json"), 40: NamedId(id: 40, name: "app/link-format"),
+  112: NamedId(id: 112, name: "app/senml+cbor"), 110: NamedId(id: 110, name: "app/senml+json"),
+  113: NamedId(id: 113, name: "app/sensml+cbor"), 111: NamedId(id: 111, name: "app/sensml+json"),
+   41: NamedId(id: 42, name: "octet-stream") }.toTable
+
+
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
               {.exportc: "hnd_hi", noconv.} =
@@ -121,21 +142,68 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
                     received: CPdu, id: CTxid)
                     {.exportc: "hnd_response", noconv.} =
   ## client response handler
-  #oplog.log(lvlDebug, "Response received")
+  let codeStr = "$#.$#\n" % [fmt"{received.code shr 5}",
+                             fmt"{received.code and 0x1F:>02}"]
+
+  # read options
+  var
+    iter = new COptIterator
+    options = newSeq[MessageOption]()
+
+  discard initOptIterator(received, iter, COAP_OPT_ALL)
+  var iterIndex = 0
+  while true:
+    let rawOpt = nextOption(iter)
+    if rawOpt == nil:
+      break
+    echo("optType " & $iter.optType)
+    iterIndex += 1
+
+    # fill in the option here
+    let option = MessageOption(optNum: iter.optType.int)
+    var optType: OptionType
+    for i in 0 ..< len(optionTypes):
+      if optionTypes[i].id == option.optNum:
+        option.typesIndex = i
+        optType = optionTypes[i]
+    let valLen = optLength(rawOpt).int
+    
+    if valLen > optType.maxlen:
+      if optType.dataType == TYPE_UINT:
+        oplog.log(lvlError, "Option $# length $#, discarded", $iterIndex, $valLen)
+      else:
+        oplog.log(lvlWarn, "Option $# length $#, truncated", $iterIndex, $valLen)
+
+    case optType.dataType
+    of TYPE_UINT:
+      if valLen == 0:
+        option.valueInt = 0
+      else:
+        var rawValue = newSeq[uint8](valLen)
+        copyMem(rawValue[0].addr, optValue(rawOpt), valLen)
+        for i in 0 ..< valLen:
+          option.valueInt += rawValue[i].int shl (8*(valLen-(i+1)))
+    of TYPE_STRING:
+      option.valueText = newString(min(valLen+1, optType.maxlen+1))
+      copyMem(option.valueText[0].addr, optValue(rawOpt), valLen)
+      option.valueText.setLen(valLen)
+      option.valueInt = -1
+    of TYPE_OPAQUE:
+      echo("opaque option")
+
+    options.add(option)
+
+  # read payload
   var dataLen: csize_t
   var dataPtr: ptr uint8
   discard getData(received, addr dataLen, addr dataPtr)
-
-  let codeStr = "$#.$#\n" % [fmt"{received.code shr 5}",
-                             fmt"{received.code and 0x1F:>02}"]
-  var jNode: JsonNode
-  
+  var dataStr = ""
   if dataLen > 0:
-    var dataStr = newString(dataLen)
+    dataStr = newString(dataLen)
     copyMem(addr dataStr[0], dataPtr, dataLen)
-    jNode = %* { "code": codeStr, "payload": dataStr }
-  else:
-    jNode = %* { "code": codeStr }
+    
+  var jNode = %* { "code": codeStr, "options": toJson(options),
+                   "payload": dataStr }
 
   netChan.send( CoMsg(subject: "response.payload", payload: $jNode) )
 
