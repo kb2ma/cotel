@@ -24,10 +24,35 @@ const
   optListHeight = 80f
 
 # Construct sorted list of content format items from the table of those items.
+# The table is generated in the conet module because it is used there as well.
+# This list is used only by the UI to sort on the name of the item.
 var cfList = newSeqOfCap[NamedId](len(contentFmtTable))
 for item in contentFmtTable.values:
   cfList.add(item)
-cfList = sorted(cfList, proc (x, y: NamedId): int = cmp(x.name, y.name))
+
+# Sort text/plain (id 0) first for convenience when defining a new option
+cfList.sort(proc (x, y: NamedId): int = 
+  if x.id == 0: -1
+  elif y.id == 0: 1
+  elif x.name < y.name: -1
+  elif x.name == y.name: 0
+  else: 1)
+
+# Construct sorted list of option type items from the table of those items.
+# The table is generated in the conet module because it is used there as well.
+# This list is used only by the UI to sort on the name of the item.
+var optionTypes = newSeqOfCap[OptionType](len(optionTypesTable))
+for item in optionTypesTable.values:
+  optionTypes.add(item)
+optionTypes.sort(proc (x, y: OptionType): int = cmp(x.name, y.name))
+
+type
+  MessageOptionView = ref object of MessageOptionContext
+    ## Provides gui_client specific information for a message option. We do not
+    ## define to/fromJsonHook functions because we don't need to share these
+    ## values with the conet module.
+    typeLabel: string
+    valueLabel: string
 
 var
   isRequestOpen* = false
@@ -52,10 +77,11 @@ var
   optionIndex = -1
     ## active index into reqOptions listbox
   optNameIndex = 0
-    ## active index into optionNameItems
+    ## active index into optionTypes dropdown for a new option
   cfNameIndex = 0
-    ## active index into cfNameItems
+    ## active index into cfList dropdown for a new Content-Format value
   optValue = newStringOfCap(optValueCapacity)
+    ## user text representation of value for a new option
   optErrText = ""
 
   # response options
@@ -80,7 +106,7 @@ proc onNetMsgRequest*(msg: CoMsg) =
 
 proc igComboNamedObj[T](label: string, currentIndex: var int,
                     idList: openArray[T]): bool =
-  ## Combo box to display a list of NamedIds, like option types.
+  ## Combo box to display a list of types T, which must have a `name` attribute.
   result = false
   if igBeginCombo(label, idList[currentIndex].name):
     for i in 0 ..< len(idList):
@@ -106,23 +132,13 @@ proc resetContents() =
   respOptions = newSeq[MessageOption]()
   respText = ""
 
-proc readNewOption(optType: OptionType): MessageOption =
+proc buildNewOption(optType: OptionType): MessageOption =
   ## Reads the option type and value for a new user-entered option.
   ## Returns the new option, or nil on the first failure. If nil, also sets
   ## 'optErrText'.
-  result = MessageOption(optNum: optType.id, typesIndex: optNameIndex)
-  if optType.id == OPTION_CONTENT_FORMAT.int:
+  result = MessageOption(optNum: optType.id)
+  if optType.id == COAP_OPTION_CONTENT_FORMAT:
     result.valueInt = cfList[cfNameIndex].id
-    result.valueText = cfList[cfNameIndex].name
-    #[
-    var i = 0
-    for item in cfTable.values:
-      if i == cfNameIndex:
-        result.valueInt = item.id
-        result.valueText = item.name
-        break
-      i += 1
-    ]#
   else:
     if len(optValue) == 0:
       optErrText = "Empty value"
@@ -161,6 +177,23 @@ proc readNewOption(optType: OptionType): MessageOption =
         return nil
       result.valueInt = -1
       result.valueText = optValue
+
+proc buildValueLabel(o: MessageOption): string =
+  ## Builds the display label for an option's value
+  case o.optNum
+  of COAP_OPTION_CONTENT_FORMAT:
+    result = format("$#($#)", contentFmtTable[o.valueInt].name, $o.valueInt)
+  else:
+    if o.valueInt >= 0:
+      if len(o.valueText) > 0:
+        result = format("$#($#)", o.valueText, $o.valueInt)
+      else:
+        result = $o.valueInt
+    elif len(o.valueChars) > 0:
+      for i in o.valueChars:
+        result.add(toHex(cast[int](i), 2))
+    else:
+      result = o.valueText
 
 proc showRequestWindow*() =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
@@ -214,7 +247,7 @@ proc showRequestWindow*() =
     igBeginChild("OptListHeaderChild",
                  ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:24f))
     igTextColored(headingColor, "Type")
-    igSameLine(160)
+    igSameLine(150)
     igTextColored(headingColor, "Value")
     igSeparator()
     igEndChild()
@@ -228,27 +261,23 @@ proc showRequestWindow*() =
 
     for i in 0 ..< len(reqOptions):
       let o = reqOptions[i]
+      if o.ctx == nil:
+        # ImGui requires '##' suffix to uniquely identify a selectable object
+        let v = MessageOptionView()
+        v.typeLabel = format("$#($#)##reqOpt$#", optionTypesTable[o.optNum].name,
+                             $o.optNum, $i)
+        v.valueLabel = buildValueLabel(o)
+        o.ctx = v
       if i > 0:
         igNextColumn()
-      if igSelectable(format("$#($#)##opt$#", optionTypes[o.typesIndex].name, $o.optNum, $i),
-                      i == optionIndex, ImGuiSelectableFlags.SpanAllColumns):
+      if igSelectable(MessageOptionView(o.ctx).typeLabel, i == optionIndex,
+                      ImGuiSelectableFlags.SpanAllColumns):
         optionIndex = i;
         optErrText = ""
         isNewOption = false
 
       igNextColumn()
-      if o.valueInt > -1:
-        if len(o.valueText) > 0:
-          igText(format("$#($#)", o.valueText, $o.valueInt))
-        else:
-          igText($o.valueInt)
-      elif len(o.valueChars) > 0:
-        var charText: string
-        for i in o.valueChars:
-          charText.add(toHex(cast[int](i), 2))
-        igText(charText)
-      else:
-        igText(o.valueText)
+      igText(MessageOptionView(o.ctx).valueLabel)
     igEndChild()
 
     # buttons for option list
@@ -262,6 +291,9 @@ proc showRequestWindow*() =
       optValue = newStringofCap(optValueCapacity)
     if igButton("Delete") and optionIndex >= 0:
       reqOptions.delete(optionIndex)
+      # Trigger relabel on next display since index in collection may change
+      for o in reqOptions:
+        o.ctx = nil
       #optionIndex = -1
     igEndChild()
 
@@ -273,7 +305,7 @@ proc showRequestWindow*() =
       igSetNextItemWidth(150)
       let optType = optionTypes[optNameIndex]
       case optType.id
-      of OPTION_CONTENT_FORMAT.int:
+      of COAP_OPTION_CONTENT_FORMAT:
         discard igComboNamedObj[NamedId]("##optValue", cfNameIndex, cfList)
       else:
         discard igInputTextCap("##optValue", optValue, optValueCapacity)
@@ -281,7 +313,7 @@ proc showRequestWindow*() =
       igSameLine(350)
       if igButton("OK") or (isEnterPressed() and not isEnterHandled):
         optErrText = ""
-        let reqOption = readNewOption(optType)
+        let reqOption = buildNewOption(optType)
         if reqOption != nil:
           reqOptions.add(reqOption)
           # clear for next entry
@@ -359,30 +391,18 @@ proc showRequestWindow*() =
 
       for i in 0 ..< len(respOptions):
         let o = respOptions[i]
-        let optType = optionTypes[o.typesIndex]
+        if o.ctx == nil:
+          let v = MessageOptionView()
+          v.typeLabel = format("$#($#)", optionTypesTable[o.optNum].name,
+                               $o.optNum, $i)
+          v.valueLabel = buildValueLabel(o)
+          o.ctx = v
+          
         if i > 0:
           igNextColumn()
-        igText(format("$#($#)", optType.name, $o.optNum, $i))
-
+        igText(MessageOptionView(o.ctx).typeLabel)
         igNextColumn()
-        #echo("resp opt id " & $optType.id)
-        #echo("resp opt value " & $o.valueInt)
-        case optType.id
-        of OPTION_CONTENT_FORMAT.int:
-          igText(format("$#($#)", contentFmtTable[o.valueInt].name, $o.valueInt))
-        else:
-          if o.valueInt > -1:
-            if len(o.valueText) > 0:
-              igText(format("$#($#)", o.valueText, $o.valueInt))
-            else:
-              igText($o.valueInt)
-          elif len(o.valueChars) > 0:
-            var charText: string
-            for i in o.valueChars:
-              charText.add(toHex(cast[int](i), 2))
-            igText(charText)
-          else:
-            igText(o.valueText)
+        igText(MessageOptionView(o.ctx).valueLabel)
       igEndChild()
 
     if len(respText) > 0:

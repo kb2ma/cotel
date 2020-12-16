@@ -44,6 +44,29 @@ const
   COAP_RESPONSE_CODE_400* = ((4 shl 5) or 0).uint8
   COAP_RESPONSE_CODE_404* = ((4 shl 5) or 4).uint8
 
+  # CoAP options. Considered use of an enum, but the conet module provides a
+  # table of OptionType tuples, which is a better match for application use.
+  COAP_OPTION_IF_MATCH* =        1   # opaque 0-8 B
+  COAP_OPTION_URI_HOST* =        3   # String 1-255 B
+  COAP_OPTION_ETAG* =            4   # opaque 1-8 B
+  COAP_OPTION_IF_NONE_MATCH* =   5   # empty  0 B
+  COAP_OPTION_OBSERVE* =         6   # empty/uint 0 B/0-3 B
+  COAP_OPTION_URI_PORT* =        7   # uint 0-2 B
+  COAP_OPTION_LOCATION_PATH* =   8   # String 0-255 B
+  COAP_OPTION_URI_PATH* =       11   # String 0-255 B
+  COAP_OPTION_CONTENT_FORMAT* = 12   # uint 0-2 B
+  COAP_OPTION_MAXAGE* =         14   # uint 0-4 B default 60 Seconds
+  COAP_OPTION_URI_QUERY* =      15   # String 1-255 B
+  COAP_OPTION_ACCEPT* =         17   # uint 0-2 B
+  COAP_OPTION_LOCATION_QUERY* = 20   # String 0-255 B
+  COAP_OPTION_BLOCK2* =         23   # uint 0-3 B
+  COAP_OPTION_BLOCK1* =         27   # uint 0-3 B
+  COAP_OPTION_SIZE2* =          28   # uint 0-4 B
+  COAP_OPTION_PROXY_URI* =      35   # String 1-1034 B
+  COAP_OPTION_PROXY_SCHEME* =   39   # String 1-255 B
+  COAP_OPTION_SIZE1* =          60   # uint 0-4 B
+  COAP_OPTION_NORESPONSE* =    258   # uint 0-1 B
+
   COAP_INVALID_TXID* = -1.CTxid
   COAP_IO_WAIT* = 0
   COAP_OPT_FILTER_SIZE = 6
@@ -70,29 +93,6 @@ type
     LOG_INFO,
     LOG_DEBUG,
     COAP_LOG_CIPHERS
-
-  COptionId* = enum
-    ## libcoap COAP_OPTION... constants as an enum
-    OPTION_IF_MATCH =        1, # opaque, 0-8 B
-    OPTION_URI_HOST =        3, # String, 1-255 B
-    OPTION_ETAG =            4, # opaque, 1-8 B
-    OPTION_IF_NONE_MATCH =   5, # empty,  0 B
-    OPTION_OBSERVE =         6, # empty/uint, 0 B/0-3 B
-    OPTION_URI_PORT =        7, # uint, 0-2 B
-    OPTION_LOCATION_PATH =   8, # String, 0-255 B
-    OPTION_URI_PATH =       11, # String, 0-255 B
-    OPTION_CONTENT_FORMAT = 12, # uint, 0-2 B
-    OPTION_MAXAGE =         14, # uint, 0-4 B, default 60 Seconds
-    OPTION_URI_QUERY =      15, # String, 1-255 B
-    OPTION_ACCEPT =         17, # uint, 0-2 B
-    OPTION_LOCATION_QUERY = 20, # String, 0-255 B
-    OPTION_BLOCK2 =         23, # uint, 0-3 B
-    OPTION_BLOCK1 =         27, # uint, 0-3 B
-    OPTION_SIZE2 =          28, # uint, 0-4 B
-    OPTION_PROXY_URI =      35, # String, 1-1034 B
-    OPTION_PROXY_SCHEME =   39, # String, 1-255 B
-    OPTION_SIZE1 =          60, # uint, 0-4 B
-    OPTION_NORESPONSE =    258  # uint, 0-1 B
 
   CSockAddrUnion* {.union} = object
     ## Used only by CSockAddr

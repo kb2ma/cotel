@@ -30,8 +30,8 @@ proc handleTestGet(context: CContext, resource: CResource, session: CSession,
     # add text/plain Content-Format
     var buf: ValueBuffer
     let valLen = encodeVarSafe(cast[ptr uint8](buf.addr), len(buf).csize_t,
-                               50.uint)
-    var optlist = newOptlist(OPTION_CONTENT_FORMAT.uint16, valLen,
+                               0.uint)
+    var optlist = newOptlist(COAP_OPTION_CONTENT_FORMAT.uint16, valLen,
                              cast[ptr uint8](buf.addr))
     discard addOptlistPdu(resp, addr optlist)
 
@@ -96,7 +96,7 @@ proc handleTestPost(context: CContext, resource: CResource, session: CSession,
   if resp.code == COAP_RESPONSE_CODE_201:
     # add Location-Path option
     var path = "test"
-    var optlist = newOptlist(OPTION_LOCATION_PATH.uint16, len(path).csize_t,
+    var optlist = newOptlist(COAP_OPTION_LOCATION_PATH.uint16, len(path).csize_t,
                              cast[ptr uint8](path[0].addr))
     discard addOptlistPdu(resp, addr optlist)
 

@@ -35,35 +35,46 @@ import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils, tables
 import conet_ctx, etsi_plug
 # Provides the core context data for conet module users to share
-export conet_ctx, libcoap.COptionId
+export conet_ctx, COAP_OPTION_LOCATION_PATH, COAP_OPTION_CONTENT_FORMAT
 
 
 type
   OptionDataType* = enum
-    ## data type for a CoAP option
+    ## data type for a CoAP option type
     TYPE_UINT,
     TYPE_STRING,
     TYPE_OPAQUE
 
   OptionType* = tuple
+    ## Value parameters for a type of option
     id: int
-      # a libcoap COAP_OPTION... const
+      ## A COAP_OPTION... const
     dataType: OptionDataType
     maxlen: int
     name: string
+      ## Canonical name for the type of option, like "Uri-Path"
+
+  MessageOptionContext* = ref object of RootObj
+    ## abstract superclass for context/holder of a message option
 
   MessageOption* = ref object
-    ## Option in a CoAP message. Heuristics for value attributes:
-    ## 1. Only one of valueInt, valueChars, valueText is populated.
+    ## Option value in a CoAP message. Provides a single entity for back-end
+    ## and front-end use.
+    ##
+    ## Heuristics for use of value attributes:
+    ## 1. At least one of valueInt, valueChars, valueText must be populated.
     ## 2. valueInt unused if < 0
     ## 3. valueChars unused if empty
     ## 4. valueText unused if empty
     optNum*: int
-    typesIndex*: int
-      ## index into optionTypes array
+      ## A COAP_OPTION... const; provides a link to an OptionType
     valueText*: string
     valueChars*: seq[char]
     valueInt*: int
+    ctx*: MessageOptionContext
+      ## (optional) Context specific data about a message option; not used by
+      ## the conet module. We expect any context using the conet module to
+      ## define a concrete subclass if needed.
 
   ServerConfig* = ref object
     # Configuration data for important aspects of the server
@@ -87,46 +98,51 @@ type
   ValueBuffer = array[8, char]
     ## Holds arbitrary values for encoding/decoding with libcoap
 
-  NamedId* = object
-    id*: int
-    name*: string
+  NamedId* = tuple
+    ## Generic match for an ID to a name. Used for content format.
+    id: int
+    name: string
 
-const optionTypes* = [
-  (id: OPTION_ACCEPT.int,         dataType: TYPE_UINT,   maxlen:    2, name: "Accept"),
-  (id: OPTION_BLOCK1.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block1"),
-  (id: OPTION_BLOCK2.int,         dataType: TYPE_UINT,   maxlen:    3, name: "Block2"),
-  (id: OPTION_CONTENT_FORMAT.int, dataType: TYPE_UINT,   maxlen:    2, name: "Content-Format"),
-  (id: OPTION_ETAG.int,           dataType: TYPE_OPAQUE, maxlen:    8, name: "ETag"),
-  (id: OPTION_IF_MATCH.int,       dataType: TYPE_OPAQUE, maxlen:    8, name: "If-Match"),
-  (id: OPTION_IF_NONE_MATCH.int,  dataType: TYPE_UINT,   maxlen:    1, name: "If-None-Match"),
-  (id: OPTION_LOCATION_PATH.int,  dataType: TYPE_STRING, maxlen:  255, name: "Location-Path"),
-  (id: OPTION_LOCATION_QUERY.int, dataType: TYPE_STRING, maxlen:  255, name: "Location-Query"),
-  (id: OPTION_MAXAGE.int,         dataType: TYPE_UINT,   maxlen:    4, name: "Max-Age"),
-  (id: OPTION_NORESPONSE.int,     dataType: TYPE_UINT,   maxlen:    1, name: "No-Response"),
-  (id: OPTION_OBSERVE.int,        dataType: TYPE_UINT,   maxlen:    3, name: "Observe"),
-  (id: OPTION_PROXY_SCHEME.int,   dataType: TYPE_STRING, maxlen:  255, name: "Proxy-Scheme"),
-  (id: OPTION_PROXY_URI.int,      dataType: TYPE_STRING, maxlen: 1034, name: "Proxy-Uri"),
-  (id: OPTION_SIZE1.int,          dataType: TYPE_UINT,   maxlen:    4, name: "Size1"),
-  (id: OPTION_SIZE2.int,          dataType: TYPE_UINT,   maxlen:    4, name: "Size2"),
-  (id: OPTION_URI_HOST.int,       dataType: TYPE_STRING, maxlen:  255, name: "Uri-Host"),
-  (id: OPTION_URI_PATH.int,       dataType: TYPE_STRING, maxlen:  255, name: "Uri-Path"),
-  (id: OPTION_URI_PORT.int,       dataType: TYPE_UINT,   maxlen:    2, name: "Uri-Port"),
-  (id: OPTION_URI_QUERY.int,      dataType: TYPE_STRING, maxlen:  255, name: "Uri-Query")
-]
-
-#[
-let optTypesTable = newTable[int, OptionType]
-for optType in optionTypes:
-  optTypesTable.add(optType.id, optType)
-]#
+const optionTypesTable* = {
+  COAP_OPTION_ACCEPT:         (id: COAP_OPTION_ACCEPT,         dataType: TYPE_UINT,   maxlen:    2, name: "Accept"),
+  COAP_OPTION_BLOCK1:         (id: COAP_OPTION_BLOCK1,         dataType: TYPE_UINT,   maxlen:    3, name: "Block1"),
+  COAP_OPTION_BLOCK2:         (id: COAP_OPTION_BLOCK2,         dataType: TYPE_UINT,   maxlen:    3, name: "Block2"),
+  COAP_OPTION_CONTENT_FORMAT: (id: COAP_OPTION_CONTENT_FORMAT, dataType: TYPE_UINT,   maxlen:    2, name: "Content-Format"),
+  COAP_OPTION_ETAG:           (id: COAP_OPTION_ETAG,           dataType: TYPE_OPAQUE, maxlen:    8, name: "ETag"),
+  COAP_OPTION_IF_MATCH:       (id: COAP_OPTION_IF_MATCH,       dataType: TYPE_OPAQUE, maxlen:    8, name: "If-Match"),
+  COAP_OPTION_IF_NONE_MATCH:  (id: COAP_OPTION_IF_NONE_MATCH,  dataType: TYPE_UINT,   maxlen:    1, name: "If-None-Match"),
+  COAP_OPTION_LOCATION_PATH:  (id: COAP_OPTION_LOCATION_PATH,  dataType: TYPE_STRING, maxlen:  255, name: "Location-Path"),
+  COAP_OPTION_LOCATION_QUERY: (id: COAP_OPTION_LOCATION_QUERY, dataType: TYPE_STRING, maxlen:  255, name: "Location-Query"),
+  COAP_OPTION_MAXAGE:         (id: COAP_OPTION_MAXAGE,         dataType: TYPE_UINT,   maxlen:    4, name: "Max-Age"),
+  COAP_OPTION_NORESPONSE:     (id: COAP_OPTION_NORESPONSE,     dataType: TYPE_UINT,   maxlen:    1, name: "No-Response"),
+  COAP_OPTION_OBSERVE:        (id: COAP_OPTION_OBSERVE,        dataType: TYPE_UINT,   maxlen:    3, name: "Observe"),
+  COAP_OPTION_PROXY_SCHEME:   (id: COAP_OPTION_PROXY_SCHEME,   dataType: TYPE_STRING, maxlen:  255, name: "Proxy-Scheme"),
+  COAP_OPTION_PROXY_URI:      (id: COAP_OPTION_PROXY_URI,      dataType: TYPE_STRING, maxlen: 1034, name: "Proxy-Uri"),
+  COAP_OPTION_SIZE1:          (id: COAP_OPTION_SIZE1,          dataType: TYPE_UINT,   maxlen:    4, name: "Size1"),
+  COAP_OPTION_SIZE2:          (id: COAP_OPTION_SIZE2,          dataType: TYPE_UINT,   maxlen:    4, name: "Size2"),
+  COAP_OPTION_URI_HOST:       (id: COAP_OPTION_URI_HOST,       dataType: TYPE_STRING, maxlen:  255, name: "Uri-Host"),
+  COAP_OPTION_URI_PATH:       (id: COAP_OPTION_URI_PATH,       dataType: TYPE_STRING, maxlen:  255, name: "Uri-Path"),
+  COAP_OPTION_URI_PORT:       (id: COAP_OPTION_URI_PORT,       dataType: TYPE_UINT,   maxlen:    2, name: "Uri-Port"),
+  COAP_OPTION_URI_QUERY:      (id: COAP_OPTION_URI_QUERY,      dataType: TYPE_STRING, maxlen:  255, name: "Uri-Query")
+}.toTable
 
 const contentFmtTable* = {
-    0: NamedId(id: 0, name: "text/plain"), 60: NamedId(id: 60, name: "app/cbor"),
-   50: NamedId(id: 50 , name: "app/json"), 40: NamedId(id: 40, name: "app/link-format"),
-  112: NamedId(id: 112, name: "app/senml+cbor"), 110: NamedId(id: 110, name: "app/senml+json"),
-  113: NamedId(id: 113, name: "app/sensml+cbor"), 111: NamedId(id: 111, name: "app/sensml+json"),
-   41: NamedId(id: 42, name: "octet-stream") }.toTable
+    0: (id: 0, name: "text/plain"), 60: (id: 60, name: "app/cbor"),
+   50: (id: 50 , name: "app/json"), 40: (id: 40, name: "app/link-format"),
+  112: (id: 112, name: "app/senml+cbor"), 110: (id: 110, name: "app/senml+json"),
+  113: (id: 113, name: "app/sensml+cbor"), 111: (id: 111, name: "app/sensml+json"),
+   41: (id: 42, name: "octet-stream") }.toTable
 
+
+proc toJsonHook*(ctx: MessageOptionContext): JsonNode =
+  ## Required do-nothing function to marshall MessageOption context. The conet
+  ## module does not define an option context.
+  return newJNull()
+
+proc fromJsonHook*(a: var MessageOptionContext, b: JsonNode) =
+  ## Required do-nothing function to unmarshall MessageOption context. The
+  ## conet module does not use an option context.
+  a = nil
 
 proc handleHi(context: CContext, resource: CResource, session: CSession,
               req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -161,13 +177,9 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
 
     # fill in the option here
     let option = MessageOption(optNum: iter.optType.int)
-    var optType: OptionType
-    for i in 0 ..< len(optionTypes):
-      if optionTypes[i].id == option.optNum:
-        option.typesIndex = i
-        optType = optionTypes[i]
+    let optType = optionTypesTable[option.optNum]
     let valLen = optLength(rawOpt).int
-    
+
     if valLen > optType.maxlen:
       if optType.dataType == TYPE_UINT:
         oplog.log(lvlError, "Option $# length $#, discarded", $iterIndex, $valLen)
@@ -201,7 +213,7 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   if dataLen > 0:
     dataStr = newString(dataLen)
     copyMem(addr dataStr[0], dataPtr, dataLen)
-    
+
   var jNode = %* { "code": codeStr, "options": toJson(options),
                    "payload": dataStr }
 
@@ -313,7 +325,7 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
     let plen = parseUntil(uriPath, token, '/', pos)
     #echo("start pos: ", pos, ", token: ", token, " of len ", plen)
     if plen > 0:
-      let optlist = newOptlist(OPTION_URI_PATH.uint16, len(token).csize_t,
+      let optlist = newOptlist(COAP_OPTION_URI_PATH.uint16, len(token).csize_t,
                                cast[ptr uint8](token.cstring))
       if optlist == nil:
         raise newException(ConetError, "Can't create option list")
