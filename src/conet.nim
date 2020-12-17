@@ -55,22 +55,21 @@ type
       ## Canonical name for the type of option, like "Uri-Path"
 
   MessageOptionContext* = ref object of RootObj
-    ## abstract superclass for context/holder of a message option
+    ## Abstract superclass for context/holder of a message option. See
+    ## MessageOption definition below.
 
   MessageOption* = ref object
     ## Option value in a CoAP message. Provides a single entity for back-end
     ## and front-end use.
     ##
-    ## Heuristics for use of value attributes:
-    ## 1. At least one of valueInt, valueChars, valueText must be populated.
-    ## 2. valueInt unused if < 0
-    ## 3. valueChars unused if empty
-    ## 4. valueText unused if empty
+    ## At least one of valueInt, valueChars, valueText must be populated,
+    ## corresponding to option type.
     optNum*: int
       ## A COAP_OPTION... const; provides a link to an OptionType
     valueText*: string
     valueChars*: seq[char]
-    valueInt*: int
+      ## For value data for an opaque option type
+    valueInt*: uint
     ctx*: MessageOptionContext
       ## (optional) Context specific data about a message option; not used by
       ## the conet module. We expect any context using the conet module to
@@ -126,38 +125,36 @@ const optionTypesTable* = {
   COAP_OPTION_URI_QUERY:      (id: COAP_OPTION_URI_QUERY,      dataType: TYPE_STRING, maxlen:  255, name: "Uri-Query")
 }.toTable
 
+# sanity check at startup
+for item in optionTypesTable.values:
+  if item.dataType == TYPE_UINT:
+    assert(item.maxlen <= sizeof(uint))
+
 const contentFmtTable* = {
     0: (id: 0, name: "text/plain"), 60: (id: 60, name: "app/cbor"),
    50: (id: 50 , name: "app/json"), 40: (id: 40, name: "app/link-format"),
   112: (id: 112, name: "app/senml+cbor"), 110: (id: 110, name: "app/senml+json"),
   113: (id: 113, name: "app/sensml+cbor"), 111: (id: 111, name: "app/sensml+json"),
    41: (id: 42, name: "octet-stream") }.toTable
+  ## Content-Format option values
 
 
 proc toJsonHook*(ctx: MessageOptionContext): JsonNode =
-  ## Required do-nothing function to marshall MessageOption context. The conet
-  ## module does not define an option context.
+  ## Required do-nothing function to marshall MessageOption context attribute.
+  ## The conet module itself does not define an option context, so does not
+  ## need to export it.
   return newJNull()
 
 proc fromJsonHook*(a: var MessageOptionContext, b: JsonNode) =
   ## Required do-nothing function to unmarshall MessageOption context. The
-  ## conet module does not use an option context.
+  ## conet module does not use a provided option context, so does not need to
+  ## read it.
   a = nil
-
-proc handleHi(context: CContext, resource: CResource, session: CSession,
-              req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
-              {.exportc: "hnd_hi", noconv.} =
-  ## server /hi GET handler; greeting
-  resp.`type` = COAP_MESSAGE_ACK
-  resp.code = COAP_RESPONSE_CODE_205
-  discard addData(resp, 5, "Howdy")
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  netChan.send( CoMsg(subject: "request.log", payload: remote & " GET /hi") )
 
 proc handleResponse(context: CContext, session: CSession, sent: CPdu,
                     received: CPdu, id: CTxid)
                     {.exportc: "hnd_response", noconv.} =
-  ## client response handler
+  ## Client response handler. Logs an error for an unexpected exception.
   let codeStr = "$#.$#\n" % [fmt"{received.code shr 5}",
                              fmt"{received.code and 0x1F:>02}"]
 
@@ -165,58 +162,62 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   var
     iter = new COptIterator
     options = newSeq[MessageOption]()
+    dataStr = ""
 
-  discard initOptIterator(received, iter, COAP_OPT_ALL)
-  var iterIndex = 0
-  while true:
-    let rawOpt = nextOption(iter)
-    if rawOpt == nil:
-      break
-    echo("optType " & $iter.optType)
-    iterIndex += 1
+  try:
+    discard initOptIterator(received, iter, COAP_OPT_ALL)
+    var iterIndex = 0
+    while true:
+      let rawOpt = nextOption(iter)
+      if rawOpt == nil:
+        break
+      echo("optType " & $iter.optType)
+      iterIndex += 1
 
-    # fill in the option here
-    let option = MessageOption(optNum: iter.optType.int)
-    let optType = optionTypesTable[option.optNum]
-    let valLen = optLength(rawOpt).int
+      # fill in the option here
+      let option = MessageOption(optNum: iter.optType.int)
+      let optType = optionTypesTable[option.optNum]
+      let valLen = optLength(rawOpt).int
 
-    if valLen > optType.maxlen:
-      if optType.dataType == TYPE_UINT:
+      # Discard oversized option. In some contexts it might make more sense to
+      # just throw an exception.
+      if valLen > optType.maxlen:
         oplog.log(lvlError, "Option $# length $#, discarded", $iterIndex, $valLen)
-      else:
-        oplog.log(lvlWarn, "Option $# length $#, truncated", $iterIndex, $valLen)
+        continue
 
-    case optType.dataType
-    of TYPE_UINT:
-      if valLen == 0:
-        option.valueInt = 0
-      else:
-        var rawValue = newSeq[uint8](valLen)
-        copyMem(rawValue[0].addr, optValue(rawOpt), valLen)
-        for i in 0 ..< valLen:
-          option.valueInt += rawValue[i].int shl (8*(valLen-(i+1)))
-    of TYPE_STRING:
-      option.valueText = newString(min(valLen+1, optType.maxlen+1))
-      copyMem(option.valueText[0].addr, optValue(rawOpt), valLen)
-      option.valueText.setLen(valLen)
-      option.valueInt = -1
-    of TYPE_OPAQUE:
-      echo("opaque option")
+      case optType.dataType
+      of TYPE_UINT:
+        if valLen == 0:
+          option.valueInt = 0
+        else:
+          var rawValue = newSeq[uint8](valLen)
+          copyMem(rawValue[0].addr, optValue(rawOpt), valLen)
+          for i in 0 ..< valLen:
+            option.valueInt += rawValue[i].uint shl (8*(valLen-(i+1)))
+      of TYPE_STRING:
+        option.valueText = newString(min(valLen+1, optType.maxlen+1))
+        copyMem(option.valueText[0].addr, optValue(rawOpt), valLen)
+        option.valueText.setLen(valLen)
+      of TYPE_OPAQUE:
+        option.valueChars = newSeq[char](min(valLen+1, optType.maxlen+1))
+        copyMem(option.valueChars[0].addr, optValue(rawOpt), valLen)
+        option.valueChars.setLen(valLen)
 
-    options.add(option)
+      options.add(option)
 
-  # read payload
-  var dataLen: csize_t
-  var dataPtr: ptr uint8
-  discard getData(received, addr dataLen, addr dataPtr)
-  var dataStr = ""
-  if dataLen > 0:
-    dataStr = newString(dataLen)
-    copyMem(addr dataStr[0], dataPtr, dataLen)
+    # read payload
+    var dataLen: csize_t
+    var dataPtr: ptr uint8
+    discard getData(received, addr dataLen, addr dataPtr)
+    if dataLen > 0:
+      dataStr = newString(dataLen)
+      copyMem(addr dataStr[0], dataPtr, dataLen)
+  except:
+    oplog.log(lvlError, "Error reading response: " & getCurrentExceptionMsg())
+    return
 
   var jNode = %* { "code": codeStr, "options": toJson(options),
                    "payload": dataStr }
-
   netChan.send( CoMsg(subject: "response.payload", payload: $jNode) )
 
 
@@ -336,14 +337,20 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   # other options
   for optJson in reqJson["reqOptions"]:
     let option = jsonTo(optJson, MessageOption)
+    let optType = optionTypesTable[option.optNum]
     var
       buf: ValueBuffer
       optlist: COptlist
-    if option.valueInt > -1:
+      
+    case optType.dataType
+    of TYPE_UINT:
       let valLen = encodeVarSafe(cast[ptr uint8](buf.addr), len(buf).csize_t,
-                                 option.valueInt.uint)
+                                 option.valueInt)
       optlist = newOptlist(option.optNum.uint16, valLen, cast[ptr uint8](buf.addr))
-    else:
+    of TYPE_OPAQUE:
+      optlist = newOptlist(option.optNum.uint16, len(option.valueChars).csize_t,
+                           cast[ptr uint8](option.valueChars[0].addr))
+    of TYPE_STRING:
       optlist = newOptlist(option.optNum.uint16, len(option.valueText).csize_t,
                            cast[ptr uint8](option.valueText.cstring))
     if optlist == nil:

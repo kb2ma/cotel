@@ -23,9 +23,8 @@ const
     ## dull gold color
   optListHeight = 80f
 
-# Construct sorted list of content format items from the table of those items.
-# The table is generated in the conet module because it is used there as well.
-# This list is used only by the UI to sort on the name of the item.
+# Construct sorted list of content format items from the table of those items,
+# which is generated in the conet module.
 var cfList = newSeqOfCap[NamedId](len(contentFmtTable))
 for item in contentFmtTable.values:
   cfList.add(item)
@@ -38,9 +37,8 @@ cfList.sort(proc (x, y: NamedId): int =
   elif x.name == y.name: 0
   else: 1)
 
-# Construct sorted list of option type items from the table of those items.
-# The table is generated in the conet module because it is used there as well.
-# This list is used only by the UI to sort on the name of the item.
+# Construct sorted list of option type items from the table of those items,
+# which is generated in the conet module.
 var optionTypes = newSeqOfCap[OptionType](len(optionTypesTable))
 for item in optionTypesTable.values:
   optionTypes.add(item)
@@ -133,28 +131,29 @@ proc resetContents() =
   respText = ""
 
 proc buildNewOption(optType: OptionType): MessageOption =
-  ## Reads the option type and value for a new user-entered option.
+  ## Reads the user entered option type and value for a new option.
   ## Returns the new option, or nil on the first failure. If nil, also sets
   ## 'optErrText'.
   result = MessageOption(optNum: optType.id)
   if optType.id == COAP_OPTION_CONTENT_FORMAT:
-    result.valueInt = cfList[cfNameIndex].id
+    # value from drop down, not text entry
+    result.valueInt = cfList[cfNameIndex].id.uint
   else:
     if len(optValue) == 0:
       optErrText = "Empty value"
       return nil
-    elif optType.dataType == TYPE_UINT:
+    case optType.dataType
+    of TYPE_UINT:
       try:
-        result.valueInt = parseInt(optValue)
+        result.valueInt = parseUint(optValue)
       except ValueError:
-        optErrText = "Expecting integer value"
+        optErrText = "Expecting non-negative integer value"
         return nil
-      let maxval = 1 shl (optType.maxlen * 8) - 1
+      let maxval = 1.uint shl (optType.maxlen * 8) - 1
       if result.valueInt > maxval:
         optErrText = "Value exceeds option maximum " & $maxval
         return nil
-    elif optType.dataType == TYPE_OPAQUE:
-      result.valueInt = -1
+    of TYPE_OPAQUE:
       if len(optValue) mod 2 != 0:
         optErrText = "Expecting hex digits, but length not a multiple of two"
         return nil
@@ -170,30 +169,26 @@ proc buildNewOption(optType: OptionType): MessageOption =
       except ValueError:
         optErrText = "Expecting hex digits"
         return nil
-    else:  # TYPE_STRING
+    of TYPE_STRING:
       if len(optValue) > optType.maxlen:
         optErrText = format("Length $# exceeds option maximum $#", $len(optValue),
                      $optType.maxlen)
         return nil
-      result.valueInt = -1
       result.valueText = optValue
 
-proc buildValueLabel(o: MessageOption): string =
-  ## Builds the display label for an option's value
-  case o.optNum
-  of COAP_OPTION_CONTENT_FORMAT:
-    result = format("$#($#)", contentFmtTable[o.valueInt].name, $o.valueInt)
-  else:
-    if o.valueInt >= 0:
-      if len(o.valueText) > 0:
-        result = format("$#($#)", o.valueText, $o.valueInt)
-      else:
-        result = $o.valueInt
-    elif len(o.valueChars) > 0:
-      for i in o.valueChars:
-        result.add(toHex(cast[int](i), 2))
+proc buildValueLabel(optType: OptionType, o: MessageOption): string =
+  ## Builds the display label for an option's value.
+  case optType.dataType
+  of TYPE_UINT:
+    if o.optNum == COAP_OPTION_CONTENT_FORMAT:
+      result = format("$#($#)", contentFmtTable[o.valueInt.int].name, $o.valueInt)
     else:
-      result = o.valueText
+      result = $o.valueInt
+  of TYPE_OPAQUE:
+    for i in o.valueChars:
+      result.add(toHex(cast[int](i), 2))
+  of TYPE_STRING:
+    result = o.valueText
 
 proc showRequestWindow*() =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
@@ -261,12 +256,12 @@ proc showRequestWindow*() =
 
     for i in 0 ..< len(reqOptions):
       let o = reqOptions[i]
+      let optType = optionTypesTable[o.optNum]
       if o.ctx == nil:
         # ImGui requires '##' suffix to uniquely identify a selectable object
         let v = MessageOptionView()
-        v.typeLabel = format("$#($#)##reqOpt$#", optionTypesTable[o.optNum].name,
-                             $o.optNum, $i)
-        v.valueLabel = buildValueLabel(o)
+        v.typeLabel = format("$#($#)##reqOpt$#", optType.name, $o.optNum, $i)
+        v.valueLabel = buildValueLabel(optType, o)
         o.ctx = v
       if i > 0:
         igNextColumn()
@@ -391,11 +386,11 @@ proc showRequestWindow*() =
 
       for i in 0 ..< len(respOptions):
         let o = respOptions[i]
+        let optType = optionTypesTable[o.optNum]
         if o.ctx == nil:
           let v = MessageOptionView()
-          v.typeLabel = format("$#($#)", optionTypesTable[o.optNum].name,
-                               $o.optNum, $i)
-          v.valueLabel = buildValueLabel(o)
+          v.typeLabel = format("$#($#)", optType.name, $o.optNum, $i)
+          v.valueLabel = buildValueLabel(optType, o)
           o.ctx = v
           
         if i > 0:
@@ -404,9 +399,10 @@ proc showRequestWindow*() =
         igNextColumn()
         igText(MessageOptionView(o.ctx).valueLabel)
       igEndChild()
+      if len(respText) > 0:
+        igSeparator()
 
     if len(respText) > 0:
-      igSeparator()
       igSetCursorPosY(igGetCursorPosY() + 8f)
       igSetNextItemWidth(500)
       igTextWrapped(respText)
