@@ -1,4 +1,3 @@
-##
 ## Library for CoAP messaging. Contains common messaging functionality on top
 ## of libcoap, like reading options from a PDU.
 ##
