@@ -103,7 +103,7 @@ proc igComboString*(label: string, currentIndex: var int,
         result = true
     igEndCombo()
 
-proc igInputTextCap*(label: string, text: var string, cap: int32,
+proc igInputTextCap*(label: string, text: var string, cap: int,
                      size: ImVec2 = ImVec2(x: 0, y: 0),
                      flags: ImGuiInputTextFlags = 0.ImGuiInputTextFlags): bool =
   ## Synchronizes the length property of the input Nim string with its component
@@ -116,7 +116,7 @@ proc igInputTextCap*(label: string, text: var string, cap: int32,
     # causes a segmentation fault in ImGui.
     text.setLen(1)
     isEmpty = true
-  if igInputTextEx(label, nil, text, cap, size, flags):
+  if igInputTextEx(label, nil, text, cap.int32, size, flags):
     text.setLen(len(text.cstring))
     return true
   elif isEmpty:

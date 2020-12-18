@@ -380,7 +380,7 @@ proc showRequestWindow*() =
       # Adjust height based on number of items, up to four rows
       igBeginChild("RespOptListChild",
                    ImVec2(x:igGetWindowContentRegionWidth() * 0.8f,
-                          y:max(min(20 * len(respOptions), 80), 20).float))
+                          y:max(min(26 * len(respOptions), 80), 20).float))
       igColumns(2, "respOptcols", false)
       igSetColumnWidth(-1, 150)
 
@@ -395,9 +395,15 @@ proc showRequestWindow*() =
           
         if i > 0:
           igNextColumn()
+        igAlignTextToFramePadding()
         igText(MessageOptionView(o.ctx).typeLabel)
         igNextColumn()
-        igText(MessageOptionView(o.ctx).valueLabel)
+        #igText(MessageOptionView(o.ctx).valueLabel)
+        discard igInputTextCap(format("##respOption$#",$i),
+                               MessageOptionView(o.ctx).valueLabel,
+                               len(MessageOptionView(o.ctx).valueLabel),
+                               ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing()+2),
+                               ImGuiInputTextFlags.ReadOnly)
       igEndChild()
       if len(respText) > 0:
         igSeparator()
@@ -405,6 +411,8 @@ proc showRequestWindow*() =
     if len(respText) > 0:
       igSetCursorPosY(igGetCursorPosY() + 8f)
       igSetNextItemWidth(500)
-      igTextWrapped(respText)
+      discard igInputTextCap("##respPayload", respText, len(respText),
+                             ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4),
+                             (ImGuiInputTextFlags.Multiline.int or ImGuiInputTextFlags.ReadOnly.int).ImGuiInputTextFlags)
 
   igEnd()
