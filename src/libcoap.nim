@@ -39,6 +39,7 @@ const
 
   COAP_RESPONSE_CODE_201* = ((2 shl 5) or 1).uint8
   COAP_RESPONSE_CODE_202* = ((2 shl 5) or 2).uint8
+  COAP_RESPONSE_CODE_203* = ((2 shl 5) or 3).uint8
   COAP_RESPONSE_CODE_204* = ((2 shl 5) or 4).uint8
   COAP_RESPONSE_CODE_205* = ((2 shl 5) or 5).uint8
   COAP_RESPONSE_CODE_400* = ((4 shl 5) or 0).uint8

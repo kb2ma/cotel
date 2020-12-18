@@ -9,8 +9,8 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import libcoap, nativesockets
-import hashes, logging, strformat, strutils
-import conet_ctx
+import hashes, logging, strutils
+import comsg, conet_ctx
 
 type ValueBuffer = array[0..7, char]
   ## Holds arbitrary values for encoding/decoding with libcoap
@@ -132,10 +132,19 @@ proc handleTestDelete(context: CContext, resource: CResource, session: CSession,
 # /validate resource, for ETag
 #
 # Recognized /validate resource values
-var valSourceItems = ["Now is the time", "for all good men",
-                      "to come to the aid", "of their country"]
-# Index of currently selected item for resource
-var valSourceIndex = 0
+const ETAG_LEN = 4
+
+var
+  valSourceItems = ["Now is the time", "for all good people",
+                    "to come to the aid", "of their country"]
+  # Index of currently selected item for resource
+  valSourceIndex = 1
+
+var valSourceEtag = newSeq[char](ETAG_LEN)
+let etag = hash(valSourceItems[valSourceIndex])
+for i in 0..(ETAG_LEN-1):
+  # define etag bytes in big endian order
+  valSourceEtag[(ETAG_LEN-1)-i] = cast[char]((etag.uint and (0xFF'u shl (8*i))) shr (8*i))
 
 proc handleValidateGet(context: CContext, resource: CResource, session: CSession,
                        req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -146,32 +155,36 @@ proc handleValidateGet(context: CContext, resource: CResource, session: CSession
     resp.`type` = COAP_MESSAGE_ACK
   else:
     resp.`type` = COAP_MESSAGE_NON
-  resp.code = COAP_RESPONSE_CODE_205  # Content
+
+  # Don't send payload if ETag indicates client already has it
+  var isReqEtagValid = false
+  for opt in readOptions(req):
+    if opt.optNum == COAP_OPTION_ETAG and opt.valueChars == valSourceEtag:
+      isReqEtagValid = true
 
   var chain: COptlist
-
-  # add text/plain Content-Format
-  var buf: ValueBuffer
-  let valLen = encodeVarSafe(cast[ptr uint8](buf.addr), len(buf).csize_t,
-                             0.uint)
-  var optlist = newOptlist(COAP_OPTION_CONTENT_FORMAT.uint16, valLen,
-                           cast[ptr uint8](buf.addr))
-  discard insertOptlist(addr chain, optlist)
-
   # add ETag
-  let contents = valSourceItems[valSourceIndex]
-  let etag = hash(contents)
-  var etagBytes = newSeq[char](4)
-  for i in 0..3:
-    # define etag bytes in big endian order
-    etagBytes[3-i] = cast[char]((etag.uint and (0xFF'u shl (8*i))) shr (8*i))
-    #echo(format("etag $#: $#", $(3-i), fmt"{etagBytes[3-i].uint8:02X}"))
-  optlist = newOptlist(COAP_OPTION_ETAG.uint16, len(etagBytes).csize_t,
-                       cast[ptr uint8](etagBytes[0].addr))
+  var optlist = newOptlist(COAP_OPTION_ETAG.uint16, len(valSourceEtag).csize_t,
+                           cast[ptr uint8](valSourceEtag[0].addr))
   discard insertOptlist(addr chain, optlist)
+
+  if not isReqEtagValid:
+    # add text/plain Content-Format
+    var buf: ValueBuffer
+    let valLen = encodeVarSafe(cast[ptr uint8](buf.addr), len(buf).csize_t, 0.uint)
+    optlist = newOptlist(COAP_OPTION_CONTENT_FORMAT.uint16, valLen,
+                         cast[ptr uint8](buf.addr))
+    discard insertOptlist(addr chain, optlist)
+
   discard addOptlistPdu(resp, addr chain)
 
-  discard addData(resp, len(contents).csize_t, contents)
+  # Return payload only if request does not include ETag for contents
+  if isReqEtagValid:
+    resp.code = COAP_RESPONSE_CODE_203  # Valid
+  else:
+    resp.code = COAP_RESPONSE_CODE_205  # Content
+    let contents = valSourceItems[valSourceIndex]
+    discard addData(resp, len(contents).csize_t, contents)
     
   let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
   oplog.log(lvlInfo, format("GET /validate from $#", remote))
