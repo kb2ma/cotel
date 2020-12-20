@@ -33,7 +33,7 @@ else:
 
 import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils, tables
-import comsg, conet_ctx, etsi_plug
+import comsg, conet_ctx, etsi_plug, exp_resources
 # Provides the core context data for conet module users to share
 export comsg, conet_ctx, COAP_OPTION_LOCATION_PATH, COAP_OPTION_CONTENT_FORMAT
 
@@ -99,6 +99,7 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
     if dataLen > 0:
       dataStr = newString(dataLen)
       copyMem(addr dataStr[0], dataPtr, dataLen)
+      #echo("dataStr " & dataStr)
   except:
     oplog.log(lvlError, "Error reading response: " & getCurrentExceptionMsg())
     return
@@ -351,6 +352,7 @@ proc netLoop*(config: ServerConfig) =
   # response handler.
   try:
     etsi_plug.initResources(state.ctx)
+    exp_resources.initResources(state.ctx)
 
     registerResponseHandler(state.ctx, handleResponse)
   except CatchableError as e:
