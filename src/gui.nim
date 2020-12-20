@@ -42,6 +42,8 @@ import conet, gui_client, gui_local_server, gui_netlog, gui_util
 const TICK_FREQUENCY = 30
   ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
 
+var fixedFont: ptr ImFont
+
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
   if msgTuple.dataAvailable:
@@ -71,7 +73,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   igNewFrame()
 
   if isRequestOpen:
-    showRequestWindow()
+    showRequestWindow(fixedFont)
   if isLocalServerOpen:
     gui_local_server.showWindow()
   if isNetlogOpen:
@@ -149,6 +151,7 @@ proc main(conf: CotelConf) =
 
   let fAtlas = io.fonts
   discard addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 16)
+  fixedFont = addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf", 16)
 
   # Provides default values for window from config
   gui_local_server.init(conf.pskFormat)

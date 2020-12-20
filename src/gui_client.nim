@@ -5,7 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import algorithm, json, strutils, std/jsonutils, tables
+import algorithm, json, strutils, std/jsonutils, tables, unicode
 import conet, gui_util
 
 const
@@ -84,6 +84,7 @@ var
 
   # response options
   respOptions = newSeq[MessageOption]()
+  respPayFormatIndex = 0'i32
 
 
 proc onNetMsgRequest*(msg: CoMsg) =
@@ -91,12 +92,23 @@ proc onNetMsgRequest*(msg: CoMsg) =
     let msgJson = parseJson(msg.payload)
     respCode = msgJson["code"].getStr()
 
-    echo("resp options " & $msgJson["options"])
+    #echo("resp options " & $msgJson["options"])
     for optJson in msgJson["options"]:
       respOptions.add(jsonTo(optJson, MessageOption))
 
     if msgJson.hasKey("payload"):
-      respText = msgJson["payload"].getStr()
+      # Convert any non-printable ASCII chars to a U00B7 dot. Also add line
+      # break at 50 chars.
+      var runeCount = 0
+      for r in runes(msgJson["payload"].getStr()):
+        if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
+          respText.add("\u{B7}")
+        else:
+          respText.add(toUTF8(r))
+        runeCount += 1
+        if runeCount == 50:
+          respText.add("\n")
+          runeCount = 0
     else:
       respText = ""
   elif msg.subject == "send_msg.error":
@@ -190,7 +202,7 @@ proc buildValueLabel(optType: OptionType, o: MessageOption): string =
   of TYPE_STRING:
     result = o.valueText
 
-proc showRequestWindow*() =
+proc showRequestWindow*(fixedFont: ptr ImFont) =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
   # it's handled only once.
   var isEnterHandled = false
@@ -326,10 +338,12 @@ proc showRequestWindow*() =
   if reqMethodIndex == 1 or reqMethodIndex == 2:
     # Include payload for POST or PUT
     igText("Payload")
-    igSetNextItemWidth(400)
+    igSetNextItemWidth(420)
+    igPushFont(fixedFont)
     discard igInputTextCap("##payload", payload, payloadCapacity,
                            ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 2),
                            Multiline)
+    igPopFont()
 
   # Send
   igSetCursorPosY(igGetCursorPosY() + 8f)
@@ -337,6 +351,7 @@ proc showRequestWindow*() =
     errText = ""
     respCode = ""
     respOptions = newSeq[MessageOption]()
+    respText = ""
     var msgType: string
     if reqConfirm: msgType = "CON" else: msgType = "NON"
     var jNode = %*
@@ -409,10 +424,19 @@ proc showRequestWindow*() =
         igSeparator()
 
     if len(respText) > 0:
-      igSetCursorPosY(igGetCursorPosY() + 8f)
-      igSetNextItemWidth(500)
+      igSetCursorPosY(igGetCursorPosY() + 4f)
+      igAlignTextToFramePadding()
+      igText("Payload")
+      #igSameLine(labelColWidth)
+      #igRadioButton("Text", respPayFormatIndex.addr, 0)
+      #igSameLine()
+      #igRadioButton("Hex", respPayFormatIndex.addr, 1)
+
+      igSetNextItemWidth(420)
+      igPushFont(fixedFont)
       discard igInputTextCap("##respPayload", respText, len(respText),
                              ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4),
                              (ImGuiInputTextFlags.Multiline.int or ImGuiInputTextFlags.ReadOnly.int).ImGuiInputTextFlags)
+      igPopFont()
 
   igEnd()
