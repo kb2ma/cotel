@@ -97,6 +97,9 @@ var
   respPayFormatIndex = FORMAT_TEXT.int32
     ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
     ## satsify ImGui radio button.
+  isChangedOption = false
+    ## Tracks if new option type or value have changed, to support use of Enter
+    ## key to save option.
 
 
 proc buildPayloadText(paySource: string, format: PayloadFormats): string =
@@ -158,15 +161,16 @@ proc igComboNamedObj[T](label: string, currentIndex: var int,
       let isSelected = (i == currentIndex)
       if igSelectable(idList[i].name, isSelected):
         currentIndex = i
+        result = true
       if isSelected:
         igSetItemDefaultFocus()
-        result = true
     igEndCombo()
 
 proc resetContents() =
   ## Resets many vars to blank/empty state.
   reqPath = newString(reqPathCapacity)
   reqOptions = newSeq[MessageOption]()
+  isChangedOption = false
   optionIndex = -1
   optNameIndex = 0
   cfNameIndex = 0
@@ -256,10 +260,6 @@ proc validateReqPayload() =
     payload = strippedPayload
 
 proc showRequestWindow*(fixedFont: ptr ImFont) =
-  # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
-  # it's handled only once.
-  var isEnterHandled = false
-
   igSetNextWindowSize(ImVec2(x: 500, y: 300), FirstUseEver)
   igBegin("Request", isRequestOpen.addr)
   let labelColWidth = 90f
@@ -301,6 +301,8 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   igSetNextItemWidth(100)
   igCheckbox("Confirm", reqConfirm.addr)
 
+  var isSubmitOption = false
+  var optType: OptionType
   igItemSize(ImVec2(x:0,y:8))
   if igCollapsingHeader("Options"):
     # Must create child to limit length of separator
@@ -335,6 +337,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         optionIndex = i;
         optErrText = ""
         isNewOption = false
+        isChangedOption = false
 
       igNextColumn()
       igText(MessageOptionView(o.ctx).valueLabel)
@@ -347,6 +350,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     igSetCursorPosY(igGetCursorPosY() + 8f)
     if igButton("New"):
       isNewOption = true
+      isChangedOption = false
       optionIndex = -1
       optValue = newStringofCap(optValueCapacity)
     if igButton("Delete") and optionIndex >= 0:
@@ -360,37 +364,42 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     # new option entry
     if isNewOption:
       igSetNextItemWidth(140)
-      discard igComboNamedObj[OptionType]("##optName", optNameIndex, optionTypes)
+      if igComboNamedObj[OptionType]("##optName", optNameIndex, optionTypes):
+        isChangedOption = true
       igSameLine()
       igSetNextItemWidth(150)
-      let optType = optionTypes[optNameIndex]
+      optType = optionTypes[optNameIndex]
       case optType.id
       of COAP_OPTION_CONTENT_FORMAT:
-        discard igComboNamedObj[NamedId]("##optValue", cfNameIndex, cfList)
+        if igComboNamedObj[NamedId]("##optValue", cfNameIndex, cfList):
+          isChangedOption = true
       else:
-        discard igInputTextCap("##optValue", optValue, optValueCapacity)
+        if igInputTextCap("##optValue", optValue, optValueCapacity):
+          isChangedOption = true
 
       igSameLine(350)
-      #if igButton("OK") or (isEnterPressed() and not isEnterHandled):
-      if igButton("OK"):
-        optErrText = ""
-        let reqOption = buildNewOption(optType)
-        if reqOption != nil:
-          reqOptions.add(reqOption)
-          # clear for next entry
-          optValue = newStringOfCap(optValueCapacity)
-        isEnterHandled = true
+      if igButton("OK") or (isEnterPressed() and isChangedOption):
+        # Option save handled below
+        isSubmitOption = true
 
       igSameLine()
       if igButton("Done"):
         optErrText = ""
         isNewOption = false
+        isChangedOption = false
 
       if optErrText != "":
         igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), optErrText)
+    igSeparator()
 
+  # One of three situations may consume press of Enter key, listed below in
+  # priority order.
+  #   1. New line in request payload, when cursor in ##payload field
+  #   2. New option to be saved (like press OK button)
+  #   3. Send request (like press Send Request button)
+  var isEnterHandled = false
   if reqMethodIndex == 1 or reqMethodIndex == 2:
-    # Include payload for POST or PUT
+    # Include payload for POST or PUT.
     igText("Payload")
     igSetNextItemWidth(420)
     igPushFont(fixedFont)
@@ -399,12 +408,25 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
                            (ImGuiInputTextFlags.Multiline.int32 or
                             ImGuiInputTextFlags.CallbackCharFilter.int32).ImGuiInputTextFlags,
                             cast[ImGuiInputTextCallback](filterPayloadChar))
+    if igIsItemActive() and isEnterPressed():
+      isEnterHandled = true
     igPopFont()
+
+  if isSubmitOption and not isEnterHandled:
+    # Must handle option save here, after determine if payload InputText
+    # handled the Enter key.
+    optErrText = ""
+    let reqOption = buildNewOption(optType)
+    if reqOption != nil:
+      reqOptions.add(reqOption)
+      # clear for next entry
+      optValue = newStringOfCap(optValueCapacity)
+    isEnterHandled = true
+    isChangedOption = false
 
   # Send
   igSetCursorPosY(igGetCursorPosY() + 8f)
-  #if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
-  if igButton("Send Request"):
+  if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
     errText = ""
     respCode = ""
     respOptions = newSeq[MessageOption]()

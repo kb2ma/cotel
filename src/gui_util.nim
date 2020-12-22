@@ -98,9 +98,9 @@ proc igComboString*(label: string, currentIndex: var int,
       var isSelected = (i == currentIndex)
       if igSelectable(strList[i], isSelected.addr):
         currentIndex = i
+        result = true
       if isSelected:
         igSetItemDefaultFocus()
-        result = true
     igEndCombo()
 
 proc igInputTextCap*(label: string, text: var string, cap: int,
