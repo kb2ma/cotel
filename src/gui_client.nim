@@ -15,10 +15,13 @@ const
   optValueCapacity = 1034
     ## Length of the string used to edit option value; the longest possible
     ## option value.
-  payloadCapacity = 64
+  payloadCapacity = 1024
+  payloadTextWidth = 50
+    ## Width in chars for display of payload
 
   protoItems = ["coap", "coaps"]
   methodItems = ["GET", "POST", "PUT", "DELETE"]
+  payFormatItems = ["Text", "Hex"]
   headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
     ## dull gold color
   optListHeight = 80f
@@ -45,6 +48,10 @@ for item in optionTypesTable.values:
 optionTypes.sort(proc (x, y: OptionType): int = cmp(x.name, y.name))
 
 type
+  PayloadFormats = enum
+    FORMAT_TEXT,
+    FORMAT_HEX
+
   MessageOptionView = ref object of MessageOptionContext
     ## Provides gui_client specific information for a message option. We do not
     ## define to/fromJsonHook functions because we don't need to share these
@@ -67,7 +74,10 @@ var
   reqConfirm = false
   payload = newStringOfCap(payloadCapacity)
   respCode = ""
-  respText = ""
+  respPayload = ""
+    ## Actual payload from conet.
+  respPayText = ""
+    ## Payload representation for display.
   errText = ""
 
   # request options entry
@@ -84,8 +94,42 @@ var
 
   # response options
   respOptions = newSeq[MessageOption]()
-  respPayFormatIndex = 0'i32
+  respPayFormatIndex = FORMAT_TEXT.int32
+    ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
+    ## satsify ImGui radio button.
 
+
+proc buildPayloadText(paySource: string, format: PayloadFormats): string =
+  ## Build and return text suitable for payload display, based on provided raw
+  ## payload and output text format. 
+  case format
+  of FORMAT_TEXT:
+    # Convert any non-printable ASCII chars to a U00B7 dot. Also add line
+    # break as required.
+    var runeCount = 0
+    for r in runes(paySource):
+      if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
+        result.add("\u{B7}")
+      else:
+        result.add(toUTF8(r))
+      runeCount += 1
+      if runeCount == payloadTextWidth:
+        result.add("\n")
+        runeCount = 0
+  of FORMAT_HEX:
+    # Convert all chars to two-digit hex text, separated by a space. Also
+    # add a line break as required.
+    var charCount = 0
+    for c in paySource:
+      result.add(toHex(cast[int](c), 2))
+      charCount += 1
+      if charCount == 8:
+        result.add(' ')
+      if charCount == 16:
+        result.add("\n")
+        charCount = 0
+      else:
+        result.add(' ')
 
 proc onNetMsgRequest*(msg: CoMsg) =
   if msg.subject == "response.payload":
@@ -97,20 +141,11 @@ proc onNetMsgRequest*(msg: CoMsg) =
       respOptions.add(jsonTo(optJson, MessageOption))
 
     if msgJson.hasKey("payload"):
-      # Convert any non-printable ASCII chars to a U00B7 dot. Also add line
-      # break at 50 chars.
-      var runeCount = 0
-      for r in runes(msgJson["payload"].getStr()):
-        if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
-          respText.add("\u{B7}")
-        else:
-          respText.add(toUTF8(r))
-        runeCount += 1
-        if runeCount == 50:
-          respText.add("\n")
-          runeCount = 0
+      respPayload = msgJson["payload"].getStr()
+      respPayText = buildPayloadText(respPayload, respPayFormatIndex.PayloadFormats)
     else:
-      respText = ""
+      respPayload = ""
+      respPayText = ""
   elif msg.subject == "send_msg.error":
     errText = "Error sending, see log"
 
@@ -140,7 +175,8 @@ proc resetContents() =
   optErrText = ""
   respCode = ""
   respOptions = newSeq[MessageOption]()
-  respText = ""
+  respPayload = ""
+  respPayText = ""
 
 proc buildNewOption(optType: OptionType): MessageOption =
   ## Reads the user entered option type and value for a new option.
@@ -201,6 +237,23 @@ proc buildValueLabel(optType: OptionType, o: MessageOption): string =
       result.add(toHex(cast[int](i), 2))
   of TYPE_STRING:
     result = o.valueText
+
+proc filterPayloadChar(data: ptr ImGuiInputTextCallbackData): int32 =
+  ## Callback for request payload text entry to accept only ASCII chars, or
+  ## CR/LF.
+  if (data.eventChar >= ' '.uint16 and data.eventChar <= '~'.uint16) or
+      data.eventChar == 0x0A'u16 or data.eventChar == 0x0D'u16:
+    return 0
+  return 1
+
+proc validateReqPayload() =
+  # Strip newlines from request payload variable 'payload'.
+  var strippedPayload = ""
+  for line in splitLines(payload):
+    if len(line) < len(payload):
+      strippedPayload.add(line)
+  if len(strippedPayload) > 0:
+    payload = strippedPayload
 
 proc showRequestWindow*(fixedFont: ptr ImFont) =
   # Depending on UI state, the handler for isEnterPressed() may differ. Ensure
@@ -318,7 +371,8 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         discard igInputTextCap("##optValue", optValue, optValueCapacity)
 
       igSameLine(350)
-      if igButton("OK") or (isEnterPressed() and not isEnterHandled):
+      #if igButton("OK") or (isEnterPressed() and not isEnterHandled):
+      if igButton("OK"):
         optErrText = ""
         let reqOption = buildNewOption(optType)
         if reqOption != nil:
@@ -341,19 +395,24 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     igSetNextItemWidth(420)
     igPushFont(fixedFont)
     discard igInputTextCap("##payload", payload, payloadCapacity,
-                           ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 2),
-                           Multiline)
+                           ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4),
+                           (ImGuiInputTextFlags.Multiline.int32 or
+                            ImGuiInputTextFlags.CallbackCharFilter.int32).ImGuiInputTextFlags,
+                            cast[ImGuiInputTextCallback](filterPayloadChar))
     igPopFont()
 
   # Send
   igSetCursorPosY(igGetCursorPosY() + 8f)
-  if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
+  #if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
+  if igButton("Send Request"):
     errText = ""
     respCode = ""
     respOptions = newSeq[MessageOption]()
-    respText = ""
+    respPayload = ""
+    respPayText = ""
     var msgType: string
     if reqConfirm: msgType = "CON" else: msgType = "NON"
+    validateReqPayload()
     var jNode = %*
       { "msgType": msgType, "uriPath": $reqPath.cstring,
         "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
@@ -420,22 +479,24 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
                                ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing()+2),
                                ImGuiInputTextFlags.ReadOnly)
       igEndChild()
-      if len(respText) > 0:
+      if len(respPayText) > 0:
         igSeparator()
 
-    if len(respText) > 0:
+    if len(respPayText) > 0:
       igSetCursorPosY(igGetCursorPosY() + 4f)
       igAlignTextToFramePadding()
       igText("Payload")
-      #igSameLine(labelColWidth)
-      #igRadioButton("Text", respPayFormatIndex.addr, 0)
-      #igSameLine()
-      #igRadioButton("Hex", respPayFormatIndex.addr, 1)
+      igSameLine(labelColWidth)
+      if igRadioButton(payFormatItems[FORMAT_TEXT.int], respPayFormatIndex.addr, 0):
+        respPayText = buildPayloadText(respPayload, FORMAT_TEXT)
+      igSameLine()
+      if igRadioButton(payFormatItems[FORMAT_HEX.int], respPayFormatIndex.addr, 1):
+        respPayText = buildPayloadText(respPayload, FORMAT_HEX)
 
       igSetNextItemWidth(420)
       igPushFont(fixedFont)
-      discard igInputTextCap("##respPayload", respText, len(respText),
-                             ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4),
+      discard igInputTextCap("##respPayload", respPayText, len(respPayText),
+                             ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 8),
                              (ImGuiInputTextFlags.Multiline.int or ImGuiInputTextFlags.ReadOnly.int).ImGuiInputTextFlags)
       igPopFont()
 
