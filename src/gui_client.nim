@@ -72,7 +72,13 @@ var
   reqPath = newStringOfCap(reqPathCapacity)
   reqMethodIndex = 0
   reqConfirm = false
-  payload = newStringOfCap(payloadCapacity)
+  payload = ""
+  reqPayText = newStringOfCap(payloadCapacity)
+  reqPayFormatIndex = FORMAT_TEXT.int32
+    ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
+    ## satsify ImGui radio button.
+  isTextOnlyReqPayload = true
+    ## Indicates request payload contains only editable text characters
   respCode = ""
   respPayload = ""
     ## Actual payload from conet.
@@ -91,20 +97,22 @@ var
   optValue = newStringOfCap(optValueCapacity)
     ## user text representation of value for a new option
   optErrText = ""
+  isChangedOption = false
+    ## Tracks if new option type or value have changed for a request option,
+    ## to support use of Enter key to save option.
 
   # response options
   respOptions = newSeq[MessageOption]()
   respPayFormatIndex = FORMAT_TEXT.int32
     ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
     ## satsify ImGui radio button.
-  isChangedOption = false
-    ## Tracks if new option type or value have changed, to support use of Enter
-    ## key to save option.
 
 
 proc buildPayloadText(paySource: string, format: PayloadFormats): string =
   ## Build and return text suitable for payload display, based on provided raw
-  ## payload and output text format. 
+  ## payload and output text format.
+  # Must initialize to max capacity due to ImGui InputText requirements.
+  result = newStringOfCap(payloadCapacity)
   case format
   of FORMAT_TEXT:
     # Convert any non-printable ASCII chars to a U00B7 dot. Also add line
@@ -176,6 +184,7 @@ proc resetContents() =
   cfNameIndex = 0
   optValue = newStringofCap(optValueCapacity)
   payload = newStringOfCap(payloadCapacity)
+  isTextOnlyReqPayload = true
   optErrText = ""
   respCode = ""
   respOptions = newSeq[MessageOption]()
@@ -250,14 +259,32 @@ proc filterPayloadChar(data: ptr ImGuiInputTextCallbackData): int32 =
     return 0
   return 1
 
-proc validateReqPayload() =
-  # Strip newlines from request payload variable 'payload'.
-  var strippedPayload = ""
-  for line in splitLines(payload):
-    if len(line) < len(payload):
-      strippedPayload.add(line)
-  if len(strippedPayload) > 0:
-    payload = strippedPayload
+proc validateHexPayload(payText: string): bool =
+  # Strip whitespace including newlines from the provided text, and save as
+  # variable 'payload'.
+  var stripped = ""
+  try:
+    for text in strutils.splitWhitespace(payText):
+      if len(text) mod 2 != 0:
+        errText = "Expecting pairs of hex digits in payload"
+        return false
+      for i in 0 ..< (len(text) / 2).int:
+        #let charInt = fromHex[int](text.substr(i*2, i*2+1))
+        #echo(format("char $#", fmt"{charInt:X}"))
+        #stripped.add(cast[char](charInt))
+        stripped.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
+    payload = stripped
+  except ValueError:
+    errText = "Expecting hex digits in payload"
+    return false
+  return true
+
+proc validateTextPayload(payText: string) =
+  # Strip newlines from the provided text and save as variable 'payload'.
+  var stripped = ""
+  for line in splitLines(payText):
+    stripped.add(line)
+  payload = stripped
 
 proc showRequestWindow*(fixedFont: ptr ImFont) =
   igSetNextWindowSize(ImVec2(x: 500, y: 300), FirstUseEver)
@@ -296,6 +323,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   if igComboString("##method", reqMethodIndex, methodItems):
     if reqMethodIndex == 0:  # GET
       payload = newStringOfCap(payloadCapacity)
+      isTextOnlyReqPayload = true
 
   igSameLine(220)
   igSetNextItemWidth(100)
@@ -400,14 +428,42 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   var isEnterHandled = false
   if reqMethodIndex == 1 or reqMethodIndex == 2:
     # Include payload for POST or PUT.
+    igAlignTextToFramePadding()
     igText("Payload")
+    igSameLine(labelColWidth)
+    # Update payload from current InputText, and reformat. Disallow editing if
+    # transitioning from hex to text and contains non-ASCII chars.
+    if igRadioButton(payFormatItems[FORMAT_TEXT.int], reqPayFormatIndex.addr, 0):
+      if validateHexPayload(reqPayText):
+        for r in runes(payload):
+          if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
+            isTextOnlyReqPayload = false
+            break
+        reqPayText = buildPayloadText(payload, FORMAT_TEXT)
+      else:
+        reqPayFormatIndex = FORMAT_HEX.int32
+    igSameLine()
+    if igRadioButton(payFormatItems[FORMAT_HEX.int], reqPayFormatIndex.addr, 1):
+      if isTextOnlyReqPayload:
+        # Only read text if it was editable; otherwise it includes Unicode
+        # bytes. In this case hex payload is built from saved 'payload' chars.
+        validateTextPayload(reqPayText)
+      reqPayText = buildPayloadText(payload, FORMAT_HEX)
+
+    var payFlags = ImGuiInputTextFlags.Multiline.int32 or
+                   ImGuiInputTextFlags.CallbackCharFilter.int32
+    # Can't edit in text mode if contains non-text chars
+    if not isTextOnlyReqPayload and reqPayFormatIndex == FORMAT_TEXT.int32:
+      payFlags = payFlags or ImGuiInputTextFlags.ReadOnly.int32
+      igSameLine(220)
+      igTextColored(headingColor, "Read only")
+
     igSetNextItemWidth(420)
     igPushFont(fixedFont)
-    discard igInputTextCap("##payload", payload, payloadCapacity,
+    discard igInputTextCap("##payload", reqPayText, payloadCapacity,
                            ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4),
-                           (ImGuiInputTextFlags.Multiline.int32 or
-                            ImGuiInputTextFlags.CallbackCharFilter.int32).ImGuiInputTextFlags,
-                            cast[ImGuiInputTextCallback](filterPayloadChar))
+                           payFlags.ImGuiInputTextFlags,
+                           cast[ImGuiInputTextCallback](filterPayloadChar))
     if igIsItemActive() and isEnterPressed():
       isEnterHandled = true
     igPopFont()
@@ -434,13 +490,20 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     respPayText = ""
     var msgType: string
     if reqConfirm: msgType = "CON" else: msgType = "NON"
-    validateReqPayload()
-    var jNode = %*
-      { "msgType": msgType, "uriPath": $reqPath.cstring,
-        "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-        "remPort": reqPort, "method": reqMethodIndex+1,
-        "reqOptions": toJson(reqOptions), "payload": payload }
-    ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
+
+    var isValidPayload = true
+    case reqPayFormatIndex.PayloadFormats
+    of FORMAT_TEXT:
+      validateTextPayload(reqPayText)
+    of FORMAT_Hex:
+      isValidPayload = validateHexPayload(reqPayText)
+    if isValidPayload:
+      var jNode = %*
+        { "msgType": msgType, "uriPath": $reqPath.cstring,
+          "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
+          "remPort": reqPort, "method": reqMethodIndex+1,
+          "reqOptions": toJson(reqOptions), "payload": payload }
+      ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
   igSameLine(150)
   if igButton("Reset"):
