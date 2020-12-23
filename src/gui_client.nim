@@ -64,6 +64,8 @@ var
     ## Enclosing context sets this value
   isNewOption = false
     ## True if editing a new option
+  childBgColor: ptr ImVec4
+    ## Cache value for use in display loop; initialized below in init()
 
   # widget contents
   reqProtoIndex = 0
@@ -107,6 +109,10 @@ var
     ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
     ## satisfy ImGui radio button.
 
+
+proc init*() =
+  ## Initialization triggered by app after ImGui initialized
+  childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
 
 proc buildValueLabel(optType: OptionType, o: MessageOption): string =
   ## Builds the display label from an option's value.
@@ -207,6 +213,7 @@ proc resetContents() =
   respOptions = newSeq[MessageOption]()
   respPayload = ""
   respPayText = ""
+  errText = ""
 
 proc validateNewOption(optType: OptionType): MessageOption =
   ## Reads the user entered option type and value for a new option.
@@ -372,7 +379,6 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         optErrText = ""
         isNewOption = false
         isChangedOption = false
-
       igNextColumn()
       igText(MessageOptionView(o.ctx).valueLabel)
     igEndChild()
@@ -549,8 +555,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
                    ImVec2(x:igGetWindowContentRegionWidth() * 0.8f,
                           y:max(min(26 * len(respOptions), 80), 20).float))
       igColumns(2, "respOptcols", false)
-      igSetColumnWidth(-1, 150)
-
+      igSetColumnWidth(-1, 147)
       for i in 0 ..< len(respOptions):
         let o = respOptions[i]
         let optType = optionTypesTable[o.optNum]
@@ -562,16 +567,18 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
           
         if i > 0:
           igNextColumn()
-        igAlignTextToFramePadding()
         igText(MessageOptionView(o.ctx).typeLabel)
         igNextColumn()
-        #igText(MessageOptionView(o.ctx).valueLabel)
+        # Display with Text colors, but use InputText widget to allow copy text.
+        igPushStyleColor(ImGuiCol.FrameBg, childBgColor[])
         discard igInputTextCap(format("##respOption$#",$i),
                                MessageOptionView(o.ctx).valueLabel,
                                len(MessageOptionView(o.ctx).valueLabel),
                                ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing()+2),
                                ImGuiInputTextFlags.ReadOnly)
+        igPopStyleColor()
       igEndChild()
+
       if len(respPayText) > 0:
         igSeparator()
 

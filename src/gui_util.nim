@@ -124,7 +124,7 @@ proc igInputTextCap*(label: string, text: var string, cap: int,
     text.setLen(0)
   return false
 
-proc isEnterPressed*():bool =
-  ## Returns true if the enter key has been pressed
+proc isEnterPressed*(): bool =
+  ## Returns true if the Enter key has been pressed
   return igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
          igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))

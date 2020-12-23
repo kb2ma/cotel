@@ -155,6 +155,7 @@ proc main(conf: CotelConf) =
 
   # Provides default values for window from config
   gui_local_server.init(conf.pskFormat)
+  gui_client.init()
 
   var loopCount = 0
   while not w.windowShouldClose:
