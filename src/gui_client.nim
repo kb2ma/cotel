@@ -311,7 +311,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   igSetNextItemWidth(100)
   discard igComboString("##proto", reqProtoIndex, protoItems)
 
-  igSameLine(250)
+  igSameLine(220)
   igText("Port")
   igSameLine()
   igSetNextItemWidth(100)
@@ -320,13 +320,13 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   igAlignTextToFramePadding()
   igText("Host")
   igSameLine(labelColWidth)
-  igSetNextItemWidth(300)
+  igSetNextItemWidth(340)
   discard igInputTextCap("##host", reqHost, reqHostCapacity)
 
   igAlignTextToFramePadding()
   igText("URI Path")
   igSameLine(labelColWidth)
-  igSetNextItemWidth(300)
+  igSetNextItemWidth(340)
   discard igInputTextCap("##path", reqPath, reqPathCapacity)
 
   igAlignTextToFramePadding()
@@ -344,11 +344,12 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
   var isSubmitOption = false
   var optType: OptionType
+  let optControlWidth = 80f
+  let optListWidth = max(350, igGetWindowContentRegionWidth() - 80)
   igItemSize(ImVec2(x:0,y:8))
   if igCollapsingHeader("Options"):
     # Must create child to limit length of separator
-    igBeginChild("OptListHeaderChild",
-                 ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:24f))
+    igBeginChild("OptListHeaderChild", ImVec2(x:optListWidth, y:24f))
     igTextColored(headingColor, "Type")
     igSameLine(150)
     igTextColored(headingColor, "Value")
@@ -357,8 +358,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
     # Child offsets to right, so must push it left to align
     igSetCursorPosX(igGetCursorPosX() - 8f)
-    igBeginChild("OptListChild",
-                 ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:optListHeight))
+    igBeginChild("OptListChild", ImVec2(x:optListWidth, y:optListHeight))
     igColumns(2, "optcols", false)
     igSetColumnWidth(-1, 150)
 
@@ -385,8 +385,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
     # buttons for option list
     igSameLine()
-    igBeginChild("OptButtonsChild",
-                 ImVec2(x:igGetWindowContentRegionWidth() * 0.2f, y:optListHeight))
+    igBeginChild("OptButtonsChild", ImVec2(x:optControlWidth, y:optListHeight))
     igSetCursorPosY(igGetCursorPosY() + 8f)
     if igButton("New"):
       isNewOption = true
@@ -407,7 +406,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       if igComboNamedObj[OptionType]("##optName", optNameIndex, optionTypes):
         isChangedOption = true
       igSameLine()
-      igSetNextItemWidth(150)
+      igSetNextItemWidth(180 + max(0, igGetWindowContentRegionWidth() - 430))
       optType = optionTypes[optNameIndex]
       case optType.id
       of COAP_OPTION_CONTENT_FORMAT:
@@ -417,7 +416,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         if igInputTextCap("##optValue", optValue, optValueCapacity):
           isChangedOption = true
 
-      igSameLine(350)
+      igSameLine(optListWidth)
       if igButton("OK") or (isEnterPressed() and isChangedOption):
         # Flag to handle option save below
         isSubmitOption = true
@@ -540,8 +539,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     igSetCursorPosY(igGetCursorPosY() + 8f)
     if igCollapsingHeader("Options##resp"):
       # Must create child to limit length of separator
-      igBeginChild("RespOptListHeaderChild",
-                   ImVec2(x:igGetWindowContentRegionWidth() * 0.8f, y:24f))
+      igBeginChild("RespOptListHeaderChild", ImVec2(x:optListWidth, y:24f))
       igTextColored(headingColor, "Type")
       igSameLine(150)
       igTextColored(headingColor, "Value")
@@ -552,7 +550,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       igSetCursorPosX(igGetCursorPosX() - 8f)
       # Adjust height based on number of items, up to four rows
       igBeginChild("RespOptListChild",
-                   ImVec2(x:igGetWindowContentRegionWidth() * 0.8f,
+                   ImVec2(x:optListWidth,
                           y:max(min(26 * len(respOptions), 80), 20).float))
       igColumns(2, "respOptcols", false)
       igSetColumnWidth(-1, 147)
@@ -570,12 +568,14 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         igText(MessageOptionView(o.ctx).typeLabel)
         igNextColumn()
         # Display with Text colors, but use InputText widget to allow copy text.
+        # Also, red
         igPushStyleColor(ImGuiCol.FrameBg, childBgColor[])
+        igPushStyleVar(ImGuiStyleVar.FramePadding, ImVec2(x:0f, y:0f))
         discard igInputTextCap(format("##respOption$#",$i),
                                MessageOptionView(o.ctx).valueLabel,
                                len(MessageOptionView(o.ctx).valueLabel),
-                               ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing()+2),
-                               ImGuiInputTextFlags.ReadOnly)
+                               flags = ImGuiInputTextFlags.ReadOnly)
+        igPopStyleVar()
         igPopStyleColor()
       igEndChild()
 
