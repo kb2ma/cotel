@@ -15,9 +15,9 @@ const
   optValueCapacity = 1034
     ## Length of the string used to edit option value; the longest possible
     ## option value.
-  payloadCapacity = 1024
-  payloadTextWidth = 50
-    ## Width in chars for display of payload
+  reqPayloadCapacity = 1024
+  reqPayloadTextWidth = 48
+    ## Width in chars for display of payload in text mode
 
   protoItems = ["coap", "coaps"]
   methodItems = ["GET", "POST", "PUT", "DELETE"]
@@ -72,8 +72,8 @@ var
   reqPath = newStringOfCap(reqPathCapacity)
   reqMethodIndex = 0
   reqConfirm = false
-  payload = ""
-  reqPayText = newStringOfCap(payloadCapacity)
+  reqPayload = ""
+  reqPayText = newStringOfCap(reqPayloadCapacity)
   reqPayFormatIndex = FORMAT_TEXT.int32
     ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
     ## satsify ImGui radio button.
@@ -105,14 +105,31 @@ var
   respOptions = newSeq[MessageOption]()
   respPayFormatIndex = FORMAT_TEXT.int32
     ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
-    ## satsify ImGui radio button.
+    ## satisfy ImGui radio button.
 
+
+proc buildValueLabel(optType: OptionType, o: MessageOption): string =
+  ## Builds the display label from an option's value.
+  case optType.dataType
+  of TYPE_UINT:
+    if o.optNum == COAP_OPTION_CONTENT_FORMAT:
+      result = format("$#($#)", contentFmtTable[o.valueInt.int].name, $o.valueInt)
+    else:
+      result = $o.valueInt
+  of TYPE_OPAQUE:
+    for i in o.valueChars:
+      result.add(toHex(cast[int](i), 2))
+      result.add(' ')
+    # Trim trailing space
+    if len(o.valueChars) > 0: result.setLen(len(result) - 1)
+  of TYPE_STRING:
+    result = o.valueText
 
 proc buildPayloadText(paySource: string, format: PayloadFormats): string =
   ## Build and return text suitable for payload display, based on provided raw
   ## payload and output text format.
   # Must initialize to max capacity due to ImGui InputText requirements.
-  result = newStringOfCap(payloadCapacity)
+  result = newStringOfCap(reqPayloadCapacity)
   case format
   of FORMAT_TEXT:
     # Convert any non-printable ASCII chars to a U00B7 dot. Also add line
@@ -124,7 +141,7 @@ proc buildPayloadText(paySource: string, format: PayloadFormats): string =
       else:
         result.add(toUTF8(r))
       runeCount += 1
-      if runeCount == payloadTextWidth:
+      if runeCount == reqPayloadTextWidth:
         result.add("\n")
         runeCount = 0
   of FORMAT_HEX:
@@ -183,7 +200,7 @@ proc resetContents() =
   optNameIndex = 0
   cfNameIndex = 0
   optValue = newStringofCap(optValueCapacity)
-  payload = newStringOfCap(payloadCapacity)
+  reqPayload = newStringOfCap(reqPayloadCapacity)
   isTextOnlyReqPayload = true
   optErrText = ""
   respCode = ""
@@ -191,7 +208,7 @@ proc resetContents() =
   respPayload = ""
   respPayText = ""
 
-proc buildNewOption(optType: OptionType): MessageOption =
+proc validateNewOption(optType: OptionType): MessageOption =
   ## Reads the user entered option type and value for a new option.
   ## Returns the new option, or nil on the first failure. If nil, also sets
   ## 'optErrText'.
@@ -214,54 +231,35 @@ proc buildNewOption(optType: OptionType): MessageOption =
       if result.valueInt > maxval:
         optErrText = "Value exceeds option maximum " & $maxval
         return nil
+
     of TYPE_OPAQUE:
-      if len(optValue) mod 2 != 0:
-        optErrText = "Expecting hex digits, but length not a multiple of two"
+      result.valueChars = newSeq[char]()
+      for text in strutils.splitWhitespace(optValue):
+        if len(text) mod 2 != 0:
+          optErrText = "Expecting hex digits, but length not a multiple of two"
+          return nil
+        let seqLen = (len(text) / 2).int
+        try:
+          for i in 0 ..< seqLen:
+            result.valueChars.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
+        except ValueError:
+          optErrText = "Expecting hex digits"
+          return nil
+      if len(result.valueChars) > optType.maxlen:
+        optErrText = format("Byte length $# exceeds option maximum $#",
+                            len(result.valueChars), $optType.maxlen)
         return nil
-      let seqLen = (len(optValue) / 2).int
-      if seqLen > optType.maxlen:
-        optErrText = format("Byte length $# exceeds option maximum $#", $seqLen,
-                     $optType.maxlen)
-        return nil
-      result.valueChars = newSeq[char](seqLen)
-      try:
-        for i in 0 ..< seqLen:
-          result.valueChars[i] = cast[char](fromHex[int](optValue.substr(i*2, i*2+1)))
-      except ValueError:
-        optErrText = "Expecting hex digits"
-        return nil
+
     of TYPE_STRING:
       if len(optValue) > optType.maxlen:
         optErrText = format("Length $# exceeds option maximum $#", $len(optValue),
-                     $optType.maxlen)
+                            $optType.maxlen)
         return nil
       result.valueText = optValue
 
-proc buildValueLabel(optType: OptionType, o: MessageOption): string =
-  ## Builds the display label for an option's value.
-  case optType.dataType
-  of TYPE_UINT:
-    if o.optNum == COAP_OPTION_CONTENT_FORMAT:
-      result = format("$#($#)", contentFmtTable[o.valueInt.int].name, $o.valueInt)
-    else:
-      result = $o.valueInt
-  of TYPE_OPAQUE:
-    for i in o.valueChars:
-      result.add(toHex(cast[int](i), 2))
-  of TYPE_STRING:
-    result = o.valueText
-
-proc filterPayloadChar(data: ptr ImGuiInputTextCallbackData): int32 =
-  ## Callback for request payload text entry to accept only ASCII chars, or
-  ## CR/LF.
-  if (data.eventChar >= ' '.uint16 and data.eventChar <= '~'.uint16) or
-      data.eventChar == 0x0A'u16 or data.eventChar == 0x0D'u16:
-    return 0
-  return 1
-
 proc validateHexPayload(payText: string): bool =
   # Strip whitespace including newlines from the provided text, and save as
-  # variable 'payload'.
+  # variable 'reqPayload'.
   var stripped = ""
   try:
     for text in strutils.splitWhitespace(payText):
@@ -273,18 +271,26 @@ proc validateHexPayload(payText: string): bool =
         #echo(format("char $#", fmt"{charInt:X}"))
         #stripped.add(cast[char](charInt))
         stripped.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
-    payload = stripped
+    reqPayload = stripped
   except ValueError:
     errText = "Expecting hex digits in payload"
     return false
   return true
 
+proc filterPayloadChar(data: ptr ImGuiInputTextCallbackData): int32 =
+  ## Callback for request payload text entry to accept only ASCII chars, or
+  ## CR/LF.
+  if (data.eventChar >= ' '.uint16 and data.eventChar <= '~'.uint16) or
+      data.eventChar == 0x0A'u16 or data.eventChar == 0x0D'u16:
+    return 0
+  return 1
+
 proc validateTextPayload(payText: string) =
-  # Strip newlines from the provided text and save as variable 'payload'.
+  # Strip newlines from the provided text and save as variable 'reqPayload'.
   var stripped = ""
   for line in splitLines(payText):
     stripped.add(line)
-  payload = stripped
+  reqPayload = stripped
 
 proc showRequestWindow*(fixedFont: ptr ImFont) =
   igSetNextWindowSize(ImVec2(x: 500, y: 300), FirstUseEver)
@@ -322,7 +328,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   igSetNextItemWidth(100)
   if igComboString("##method", reqMethodIndex, methodItems):
     if reqMethodIndex == 0:  # GET
-      payload = newStringOfCap(payloadCapacity)
+      reqPayload = newStringOfCap(reqPayloadCapacity)
       isTextOnlyReqPayload = true
 
   igSameLine(220)
@@ -407,7 +413,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
       igSameLine(350)
       if igButton("OK") or (isEnterPressed() and isChangedOption):
-        # Option save handled below
+        # Flag to handle option save below
         isSubmitOption = true
 
       igSameLine()
@@ -416,14 +422,14 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         isNewOption = false
         isChangedOption = false
 
-      if optErrText != "":
+      if len(optErrText) > 0:
         igTextColored(ImVec4(x: 1f, y: 0f, z: 0f, w: 1f), optErrText)
     igSeparator()
 
-  # One of three situations may consume press of Enter key, listed below in
+  # One of three actions may consume press of Enter key, listed below in
   # priority order.
-  #   1. New line in request payload, when cursor in ##payload field
-  #   2. New option to be saved (like press OK button)
+  #   1. Create new line in request payload, when cursor in ##payload field
+  #   2. Save new option (like press OK button)
   #   3. Send request (like press Send Request button)
   var isEnterHandled = false
   if reqMethodIndex == 1 or reqMethodIndex == 2:
@@ -432,27 +438,28 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     igText("Payload")
     igSameLine(labelColWidth)
     # Update payload from current InputText, and reformat. Disallow editing if
-    # transitioning from hex to text and contains non-ASCII chars.
+    # transitioning from hex to text and contains non-editable chars.
     if igRadioButton(payFormatItems[FORMAT_TEXT.int], reqPayFormatIndex.addr, 0):
       if validateHexPayload(reqPayText):
-        for r in runes(payload):
+        isTextOnlyReqPayload = true
+        for r in runes(reqPayload):
           if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
             isTextOnlyReqPayload = false
             break
-        reqPayText = buildPayloadText(payload, FORMAT_TEXT)
+        reqPayText = buildPayloadText(reqPayload, FORMAT_TEXT)
       else:
         reqPayFormatIndex = FORMAT_HEX.int32
     igSameLine()
     if igRadioButton(payFormatItems[FORMAT_HEX.int], reqPayFormatIndex.addr, 1):
+      # Only read text if it was editable; otherwise it includes non-editable
+      # chars. In either case hex payload is built from saved 'reqPayload' chars.
       if isTextOnlyReqPayload:
-        # Only read text if it was editable; otherwise it includes Unicode
-        # bytes. In this case hex payload is built from saved 'payload' chars.
         validateTextPayload(reqPayText)
-      reqPayText = buildPayloadText(payload, FORMAT_HEX)
+      reqPayText = buildPayloadText(reqPayload, FORMAT_HEX)
 
     var payFlags = ImGuiInputTextFlags.Multiline.int32 or
                    ImGuiInputTextFlags.CallbackCharFilter.int32
-    # Can't edit in text mode if contains non-text chars
+    # Can't edit in text mode if contains non-editable chars
     if not isTextOnlyReqPayload and reqPayFormatIndex == FORMAT_TEXT.int32:
       payFlags = payFlags or ImGuiInputTextFlags.ReadOnly.int32
       igSameLine(220)
@@ -460,8 +467,9 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
     igSetNextItemWidth(420)
     igPushFont(fixedFont)
-    discard igInputTextCap("##payload", reqPayText, payloadCapacity,
-                           ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4),
+    # InputText is tall enough to show five lines.
+    discard igInputTextCap("##payload", reqPayText, reqPayloadCapacity,
+                           ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 4 + 6),
                            payFlags.ImGuiInputTextFlags,
                            cast[ImGuiInputTextCallback](filterPayloadChar))
     if igIsItemActive() and isEnterPressed():
@@ -472,7 +480,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     # Must handle option save here, after determine if payload InputText
     # handled the Enter key.
     optErrText = ""
-    let reqOption = buildNewOption(optType)
+    let reqOption = validateNewOption(optType)
     if reqOption != nil:
       reqOptions.add(reqOption)
       # clear for next entry
@@ -502,7 +510,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         { "msgType": msgType, "uriPath": $reqPath.cstring,
           "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
           "remPort": reqPort, "method": reqMethodIndex+1,
-          "reqOptions": toJson(reqOptions), "payload": payload }
+          "reqOptions": toJson(reqOptions), "payload": reqPayload }
       ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
   igSameLine(150)
