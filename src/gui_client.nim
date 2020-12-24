@@ -108,11 +108,45 @@ var
   respPayFormatIndex = FORMAT_TEXT.int32
     ## Index into 'payFormatItems' and 'PayloadFormats'. Must be int32 to
     ## satisfy ImGui radio button.
-
+  respMsgHasMore = false
+    ## If response received from conet includes a Block2 option, the boolean
+    ## value of the More attribute of the option. If true, more response blocks
+    ## are available and will be requested.
 
 proc init*() =
   ## Initialization triggered by app after ImGui initialized
   childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
+
+proc sendRequestNextBlock(lastBlock: MessageOption) =
+  ## Requests the next response block (Block2) in sequence. The new/revised
+  ## Block2 option will not be added to the displayed request options.
+  let nextBlock = MessageOption(optNum: COAP_OPTION_BLOCK2)
+  let lastValue = readBlockValue(lastBlock)
+  nextBlock.valueInt = genBlockValueInt(lastValue.num + 1, false,
+                                        lastValue.size).uint
+
+  var nextOptions = newSeq[MessageOption]()
+  var isBlockAdded = false
+  for opt in reqOptions:
+    if opt.optNum == COAP_OPTION_BLOCK2:
+      nextOptions.add(nextBlock)
+      isBlockAdded = true
+    else:
+      nextOptions.add(opt)
+  # Block likely not present in first request unless user manually added it.
+  if not isBlockAdded:
+    nextOptions.add(nextBlock)
+  
+  var msgType: string
+  if reqConfirm: msgType = "CON" else: msgType = "NON"
+
+  var jNode = %*
+    { "msgType": msgType, "uriPath": $reqPath.cstring,
+      "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
+      "remPort": reqPort, "method": reqMethodIndex+1,
+      "reqOptions": toJson(nextOptions), "payload": reqPayload }
+  echo("Requesting block " & $(lastValue.num + 1))
+  ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
 
 proc buildValueLabel(optType: OptionType, o: MessageOption): string =
   ## Builds the display label from an option's value.
@@ -170,16 +204,35 @@ proc onNetMsgRequest*(msg: CoMsg) =
     let msgJson = parseJson(msg.payload)
     respCode = msgJson["code"].getStr()
 
-    #echo("resp options " & $msgJson["options"])
+    # Must clear response options for each follow-on Block2 case.
+    respOptions = newSeq[MessageOption]()
+    respMsgHasMore = false
+    var lastBlock: MessageOption
     for optJson in msgJson["options"]:
-      respOptions.add(jsonTo(optJson, MessageOption))
+      echo("resp option " & $optJson)
+      let option = jsonTo(optJson, MessageOption)
+      if option.optNum == COAP_OPTION_BLOCK2:
+        respMsgHasMore = readBlockValue(option).more
+        lastBlock = option
+      respOptions.add(option)
 
     if msgJson.hasKey("payload"):
-      respPayload = msgJson["payload"].getStr()
+      # Append rather than replace follow-on Block2 responses.
+      if lastBlock != nil and readBlockValue(lastBlock).num > 0:
+        respPayload.add(msgJson["payload"].getStr())
+      else:
+        respPayload = msgJson["payload"].getStr()
       respPayText = buildPayloadText(respPayload, respPayFormatIndex.PayloadFormats)
     else:
-      respPayload = ""
-      respPayText = ""
+      # Don't clear response payload in Block2 case, although this should not
+      # happen. We wish to retain the payloads from previous responses in the
+      # series.
+      if lastBlock == nil:
+        respPayload = ""
+        respPayText = ""
+      
+    if respMsgHasMore:
+      sendRequestNextBlock(lastBlock)
   elif msg.subject == "send_msg.error":
     errText = "Error sending, see log"
 
@@ -531,6 +584,12 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     igSetCursorPosY(igGetCursorPosY() + 8f)
     igSeparator()
     igTextColored(ImVec4(x: 1f, y: 1f, z: 0f, w: 1f), "Response")
+    if respMsgHasMore:
+      igSameLine(labelColWidth)
+      igTextColored(headingColor, "partial, more to come")
+    else:
+      igSameLine(labelColWidth)
+      igTextColored(headingColor, "complete")
     igText("Code")
     igSameLine(labelColWidth)
     igSetNextItemWidth(100)

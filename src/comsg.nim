@@ -6,9 +6,9 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import libcoap
+import logging, math, tables
 # import the minimum fron conet_ctx to allow logging
 from conet_ctx import oplog
-import logging, tables
 
 type
   OptionDataType* = enum
@@ -47,6 +47,13 @@ type
       ## the conet module. We expect any context using the conet module to
       ## define a concrete subclass if needed.
 
+  BlockOptionValue* = tuple
+    ## Specifics for value of a Block1 or Block2 option
+    num: int
+    more: bool
+    size: int
+      ## size in bytes
+
 const optionTypesTable* = {
   COAP_OPTION_ACCEPT:         (id: COAP_OPTION_ACCEPT,         dataType: TYPE_UINT,   maxlen:    2, name: "Accept"),
   COAP_OPTION_BLOCK1:         (id: COAP_OPTION_BLOCK1,         dataType: TYPE_UINT,   maxlen:    3, name: "Block1"),
@@ -83,6 +90,16 @@ const contentFmtTable* = {
    41: (id: 42, name: "octet-stream") }.toTable
   ## Content-Format option values
 
+
+proc readBlockValue*(option: MessageOption): BlockOptionValue =
+  ## Populates a Block value struct from the value for a Block option.
+  result.size = 1 shl ((option.valueInt and 0x7) + 4)
+  result.more = (option.valueInt and 0x8) == 0x8
+  result.num = (option.valueInt shr 4).int
+
+proc genBlockValueInt*(num: int, more: bool, size: int): int =
+  ## Generates the value integer for a Block option.
+  return (num shl 4) + (if more: 0xF else: 0) + (log2(size.float).int - 4)
 
 proc readOptions*(pdu: CPdu): seq[MessageOption] =
   ## Reads and returns all options from the provided PDU. A caller should wrap
