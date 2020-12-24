@@ -574,7 +574,9 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         discard igInputTextCap(format("##respOption$#",$i),
                                MessageOptionView(o.ctx).valueLabel,
                                len(MessageOptionView(o.ctx).valueLabel),
-                               flags = ImGuiInputTextFlags.ReadOnly)
+                               ImVec2(x: optListWidth - 150,
+                                      y: igGetTextLineHeight()),
+                               ImGuiInputTextFlags.ReadOnly)
         igPopStyleVar()
         igPopStyleColor()
       igEndChild()
