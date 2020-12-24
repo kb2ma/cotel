@@ -182,6 +182,9 @@ proc freeContext*(context: CContext) {.importc: "coap_free_context".}
 proc newContext*(listen_addr: ptr CSockAddr): CContext
                 {.importc: "coap_new_context".}
 
+proc newMessageId*(session: CSession): uint16 {.header: "coap2/net.h",
+                   importc: "coap_new_message_id".}
+
 # Must include header pragma because library function is 'static inline'.
 proc registerResponseHandler*(context: CContext, handler: CResponseHandler)
                              {.header: "coap2/net.h",

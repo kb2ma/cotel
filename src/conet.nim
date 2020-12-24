@@ -35,7 +35,8 @@ import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils, tables
 import comsg, conet_ctx, etsi_plug, exp_resources
 # Provides the core context data for conet module users to share
-export comsg, conet_ctx, COAP_OPTION_LOCATION_PATH, COAP_OPTION_CONTENT_FORMAT
+export comsg, conet_ctx, COAP_OPTION_LOCATION_PATH, COAP_OPTION_CONTENT_FORMAT,
+  COAP_OPTION_BLOCK2
 
 
 type
@@ -197,8 +198,8 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   else:
     msgType = COAP_MESSAGE_NON
 
-  var pdu = initPdu(msgType, reqJson["method"].getInt().uint8, 1000'u16,
-                    maxSessionPduSize(session))
+  var pdu = initPdu(msgType, reqJson["method"].getInt().uint8,
+                    newMessageId(session), maxSessionPduSize(session))
   if pdu == nil:
     releaseSession(session)
     raise newException(ConetError, "Can't create client PDU")
