@@ -204,6 +204,11 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
     releaseSession(session)
     raise newException(ConetError, "Can't create client PDU")
 
+  # add token; must add before options or payload
+  let token = reqJson["token"].getStr()
+  if len(token) > 0:
+    discard addToken(pdu, len(token).csize_t, token)
+  
   # add options
   let uriPath = reqJson["uriPath"].getStr()
   var pos = 0

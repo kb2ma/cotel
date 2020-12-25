@@ -235,6 +235,9 @@ proc registerHandler*(resource: CResource, `method`: CRequestCode,
 proc addData*(pdu: CPdu, len: csize_t, data: cstring): cint
              {.importc: "coap_add_data".}
 
+proc addToken*(pdu: CPdu, len: csize_t, data: cstring): cint
+              {.importc: "coap_add_token".}
+
 proc deletePdu*(pdu: CPdu) {.importc: "coap_delete_pdu".}
 
 proc getData*(pdu: CPdu, len: ptr csize_t, data: ptr ptr uint8): cint

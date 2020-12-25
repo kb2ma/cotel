@@ -5,7 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import algorithm, json, strutils, std/jsonutils, tables, unicode
+import algorithm, json, random, strutils, std/jsonutils, tables, unicode
 import conet, gui_util
 
 const
@@ -66,6 +66,11 @@ var
     ## True if editing a new option
   childBgColor: ptr ImVec4
     ## Cache value for use in display loop; initialized below in init()
+  tokenLen: int
+    ## Length of randomly generated token, in bytes. Initialized to the
+    ## multiplicative inverse (-tokenLen) as a flag to seed the random module
+    ## on the first request. This approach should provide more variation in
+    ## the seed than always generating it at application startup time.
 
   # widget contents
   reqProtoIndex = 0
@@ -113,9 +118,10 @@ var
     ## value of the More attribute of the option. If true, more response blocks
     ## are available and will be requested.
 
-proc init*() =
+proc init*(defaultTokenLen: int) =
   ## Initialization triggered by app after ImGui initialized
   childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
+  tokenLen = -1 * defaultTokenLen
 
 proc sendRequestNextBlock(lastBlock: MessageOption) =
   ## Requests the next response block (Block2) in sequence. The new/revised
@@ -557,6 +563,17 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     var msgType: string
     if reqConfirm: msgType = "CON" else: msgType = "NON"
 
+    # Generate token
+    if tokenLen < 0:
+      # Initialize random number generator on first request by the user.
+      randomize()
+      tokenLen *= -1
+    var token: string
+    if tokenLen > 0:
+      let tokenInt = rand(uint64)
+      for i in 0 ..< tokenLen:
+        token.add(((tokenInt and (0xFF'u64 shl (8*i))) shr (8*i)).char)
+
     var isValidPayload = true
     case reqPayFormatIndex.PayloadFormats
     of FORMAT_TEXT:
@@ -567,7 +584,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       var jNode = %*
         { "msgType": msgType, "uriPath": $reqPath.cstring,
           "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-          "remPort": reqPort, "method": reqMethodIndex+1,
+          "remPort": reqPort, "method": reqMethodIndex+1, "token": token,
           "reqOptions": toJson(reqOptions), "payload": reqPayload }
       ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true

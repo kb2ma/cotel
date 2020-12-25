@@ -24,6 +24,7 @@ type
     pskFormat*: PskKeyFormat
     pskKey*: seq[char]
     pskClientId*: string
+    tokenLen*: int
     windowSize*: seq[int]
 
 proc readConfFile*(confName: string): CotelConf =
@@ -82,6 +83,10 @@ proc readConfFile*(confName: string): CotelConf =
   # client_id is a text string. Client requests use the same PSK key as the
   # local server.
   result.pskClientId = getStr(tSec["client_id"])
+
+  # Client section
+  let tClient = toml["Client"]
+  result.tokenLen = getInt(tClient["token_length"])
 
   # GUI section
   let tGui = toml["GUI"]
