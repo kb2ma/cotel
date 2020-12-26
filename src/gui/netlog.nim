@@ -15,7 +15,7 @@
 
 import imgui
 import json, logging, math, sequtils
-import conet, gui_util
+import conet, gui/util
 
 const
   LOG_LINES_MAX = 100

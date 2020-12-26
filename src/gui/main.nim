@@ -33,7 +33,7 @@
 
 import imgui, imgui/[impl_opengl, impl_glfw], nimgl/[opengl, glfw]
 import json, logging, tables, threadpool, parseOpt, std/jsonutils
-import conet, gui_client, gui_local_server, gui_netlog, gui_util
+import conet, gui/[client, localhost, netlog, util]
 
 # Disables these warnings for gui_... module imports above. The modules actually
 # *are* used, but code that generates this warning does not realize that.
@@ -49,16 +49,16 @@ proc checkNetChannel() =
   if msgTuple.dataAvailable:
     case msgTuple.msg.token
     of "local_server.open":
-      gui_local_server.setConfig(jsonTo(parseJson(msgTuple.msg.payload),
-                                 ServerConfig))
+      localhost.setConfig(jsonTo(parseJson(msgTuple.msg.payload),
+                          ServerConfig))
     of "local_server.update":
       if msgTuple.msg.subject == "config.server.RESP":
         # success
-        gui_local_server.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload),
-                                        ServerConfig))
+        localhost.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload),
+                                 ServerConfig))
       elif msgTuple.msg.subject == "config.server.ERR":
-        gui_local_server.onConfigError(jsonTo(parseJson(msgTuple.msg.payload),
-                                        ServerConfig))
+        localhost.onConfigError(jsonTo(parseJson(msgTuple.msg.payload),
+                                ServerConfig))
       else:
         doAssert(false, "Message not handled: " & msgTuple.msg.subject)
     else:
@@ -75,7 +75,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   if isRequestOpen:
     showRequestWindow(fixedFont)
   if isLocalServerOpen:
-    gui_local_server.showWindow()
+    localhost.showWindow()
   if isNetlogOpen:
     showNetlogWindow()
 
@@ -86,7 +86,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
     if igBeginMenu("CoAP"):
       igMenuItem("Client Request", nil, isRequestOpen.addr)
       if igMenuItem("Local Server", nil, isLocalServerOpen.addr):
-        gui_local_server.setPendingOpen()
+        localhost.setPendingOpen()
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
       igEndMenu()
@@ -154,8 +154,8 @@ proc main(conf: CotelConf) =
   fixedFont = addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf", 16)
 
   # Provides default values for window from config
-  gui_local_server.init(conf.pskFormat)
-  gui_client.init(conf.tokenLen)
+  localhost.init(conf.pskFormat)
+  client.init(conf.tokenLen)
 
   var loopCount = 0
   while not w.windowShouldClose:

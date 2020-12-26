@@ -7,7 +7,7 @@
 
 import imgui
 import base64, json, sequtils, strutils, std/jsonutils
-import conet, gui_util
+import conet, gui/util
 
 type
   FormStatus = enum
@@ -51,7 +51,7 @@ proc helpMarker(desc: string) =
     igEndTooltip()
 
 proc setStatus(status: FormStatus, text: string = "") =
-  gui_local_server.status = status
+  localhost.status = status
   statusText = text
 
 proc updateVars(srcConfig: ServerConfig) =

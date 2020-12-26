@@ -6,7 +6,7 @@
 
 import imgui
 import algorithm, json, random, strutils, std/jsonutils, tables, unicode
-import conet, gui_util
+import conet, gui/util
 
 const
   reqHostCapacity = 64
