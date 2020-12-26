@@ -24,7 +24,7 @@ let
   formatItems = ["hex", "text", "base64"]
 
 var
-  isLocalServerOpen* = false
+  isLocalhostOpen* = false
   status = STATUS_INIT
   statusText = ""
     ## result of pressing Save/Execute button
@@ -108,14 +108,14 @@ proc showWindow*() =
     return
 
   igSetNextWindowSize(ImVec2(x: 600, y: 300), FirstUseEver)
-  igBegin("Local Server", isLocalServerOpen.addr)
+  igBegin("Local Host", isLocalhostOpen.addr)
   # used for table of endpoints
   var colPos = 0f
   let colWidth = 90f
   let shim = 10f
 
   # headers
-  igTextColored(headingColor, "Local Endpoints")
+  igTextColored(headingColor, "Server Endpoints")
   igText("Enable")
   colPos += colWidth - shim
   igSameLine(colPos)

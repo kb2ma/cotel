@@ -74,7 +74,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
 
   if isRequestOpen:
     showRequestWindow(fixedFont)
-  if isLocalServerOpen:
+  if isLocalhostOpen:
     localhost.showWindow()
   if isNetlogOpen:
     showNetlogWindow()
@@ -85,7 +85,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   if igBeginMainMenuBar():
     if igBeginMenu("CoAP"):
       igMenuItem("Client Request", nil, isRequestOpen.addr)
-      if igMenuItem("Local Server", nil, isLocalServerOpen.addr):
+      if igMenuItem("Local Host", nil, isLocalhostOpen.addr):
         localhost.setPendingOpen()
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
