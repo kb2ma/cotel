@@ -42,7 +42,13 @@ import conet, gui/[client, localhost, netlog, util]
 const TICK_FREQUENCY = 30
   ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
 
-var fixedFont: ptr ImFont
+var monoFont: ptr ImFont
+  ## Monospaced font, maintained as a global for use in a callback as well as
+  ## from main run loop.
+
+# Font definitions embedded in source code to avoid filesystem lookup issues.
+# Definitions included separately due to size.
+include gui/font
 
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
@@ -73,7 +79,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   igNewFrame()
 
   if isRequestOpen:
-    showRequestWindow(fixedFont)
+    showRequestWindow(monoFont)
   if isLocalhostOpen:
     localhost.showWindow()
   if isNetlogOpen:
@@ -149,9 +155,10 @@ proc main(conf: CotelConf) =
   #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
   igStyleColorsClassic()
 
+  # Initialize default proportional font and monospaced font.
   let fAtlas = io.fonts
-  discard addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 16)
-  fixedFont = addFontFromFileTTF(fAtlas, "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf", 16)
+  discard addFontFromMemoryCompressedTTF(fAtlas, unsafeAddr propFontData, 236656, 16f)
+  monoFont = addFontFromMemoryCompressedTTF(fAtlas, unsafeAddr monoFontData, 150389, 16f)
 
   # Provides default values for window from config
   localhost.init(conf.pskFormat)
