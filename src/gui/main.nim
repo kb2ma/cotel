@@ -39,16 +39,38 @@ import conet, gui/[client, localhost, netlog, util]
 # *are* used, but code that generates this warning does not realize that.
 {.warning[UnusedImport]:off.}
 
-const TICK_FREQUENCY = 30
-  ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
+const
+  TICK_FREQUENCY = 30
+    ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
+  VERSION = "0.3"
 
-var monoFont: ptr ImFont
-  ## Monospaced font, maintained as a global for use in a callback as well as
-  ## from main run loop.
+var
+  monoFont: ptr ImFont
+    ## Monospaced font, maintained as a global for use in a callback as well as
+    ## from main run loop.
+  isAboutOpen = false
 
 # Font definitions embedded in source code to avoid filesystem lookup issues.
 # Definitions included separately due to size.
 include gui/font
+
+
+proc showAboutWindow*() =
+  igSetNextWindowSize(ImVec2(x: 320, y: 140), Once)
+  igBegin("About Cotel", isAboutOpen.addr,
+          (ImGuiWindowFlags.NoResize.uint or ImGuiWindowFlags.NoCollapse.uint).ImGuiWindowFlags)
+  igItemSize(ImVec2(x:45,y:0))
+  igSameLine()
+  igText("Graphical CoAP messaging tool")
+  igItemSize(ImVec2(x:70,y:0))
+  igSameLine()
+  igText(format("v$#, December 2020", VERSION))
+  igItemSize(ImVec2(x:70,y:0))
+  igSameLine()
+  igText("GitHub: kb2ma/cotel")
+  igItemSize(ImVec2(x:0,y:15))
+  igText("See LICENSE file for copyright and components")
+  igEnd()
 
 proc checkNetChannel() =
   var msgTuple = netChan.tryRecv()
@@ -84,6 +106,8 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
     localhost.showWindow()
   if isNetlogOpen:
     showNetlogWindow()
+  if isAboutOpen:
+    showAboutWindow()
 
   # Place menuing setup *below* window setup so menu can set particular window
   # options when selected. Then make first pass at displaying the window on the
@@ -98,6 +122,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
       igEndMenu()
     if igBeginMenu("Tools"):
       igMenuItem("Network Log", nil, isNetlogOpen.addr)
+      igMenuItem("About", nil, isAboutOpen.addr)
       igEndMenu()
     igEndMainMenuBar()
 
