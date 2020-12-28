@@ -158,7 +158,7 @@ proc buildValueLabel(optType: OptionType, o: MessageOption): string =
   ## Builds the display label from an option's value.
   case optType.dataType
   of TYPE_UINT:
-    if o.optNum == COAP_OPTION_CONTENT_FORMAT:
+    if [COAP_OPTION_ACCEPT, COAP_OPTION_CONTENT_FORMAT].contains(o.optNum):
       result = format("$#($#)", contentFmtTable[o.valueInt.int].name, $o.valueInt)
     else:
       result = $o.valueInt
@@ -279,15 +279,15 @@ proc validateNewOption(optType: OptionType): MessageOption =
   ## Returns the new option, or nil on the first failure. If nil, also sets
   ## 'optErrText'.
   result = MessageOption(optNum: optType.id)
-  if optType.id == COAP_OPTION_CONTENT_FORMAT:
-    # value from drop down, not text entry
-    result.valueInt = cfList[cfNameIndex].id.uint
-  else:
-    if len(optValue) == 0:
-      optErrText = "Empty value"
-      return nil
-    case optType.dataType
-    of TYPE_UINT:
+  case optType.dataType
+  of TYPE_UINT:
+    if [COAP_OPTION_ACCEPT, COAP_OPTION_CONTENT_FORMAT].contains(optType.id):
+      # value from drop down, not text entry
+      result.valueInt = cfList[cfNameIndex].id.uint
+    else:
+      if len(optValue) == 0:
+        optErrText = "Empty value"
+        return nil
       try:
         result.valueInt = parseUint(optValue)
       except ValueError:
@@ -298,30 +298,37 @@ proc validateNewOption(optType: OptionType): MessageOption =
         optErrText = "Value exceeds option maximum " & $maxval
         return nil
 
-    of TYPE_OPAQUE:
-      result.valueChars = newSeq[char]()
-      for text in strutils.splitWhitespace(optValue):
-        if len(text) mod 2 != 0:
-          optErrText = "Expecting hex digits, but length not a multiple of two"
-          return nil
-        let seqLen = (len(text) / 2).int
-        try:
-          for i in 0 ..< seqLen:
-            result.valueChars.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
-        except ValueError:
-          optErrText = "Expecting hex digits"
-          return nil
-      if len(result.valueChars) > optType.maxlen:
-        optErrText = format("Byte length $# exceeds option maximum $#",
-                            len(result.valueChars), $optType.maxlen)
+  of TYPE_OPAQUE:
+    if len(optValue) == 0 and not
+        [COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH].contains(optType.id):
+      optErrText = "Empty value"
+      return nil
+    result.valueChars = newSeq[char]()
+    for text in strutils.splitWhitespace(optValue):
+      if len(text) mod 2 != 0:
+        optErrText = "Expecting hex digits, but length not a multiple of two"
         return nil
+      let seqLen = (len(text) / 2).int
+      try:
+        for i in 0 ..< seqLen:
+          result.valueChars.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
+      except ValueError:
+        optErrText = "Expecting hex digits"
+        return nil
+    if len(result.valueChars) > optType.maxlen:
+      optErrText = format("Byte length $# exceeds option maximum $#",
+                          len(result.valueChars), $optType.maxlen)
+      return nil
 
-    of TYPE_STRING:
-      if len(optValue) > optType.maxlen:
-        optErrText = format("Length $# exceeds option maximum $#", $len(optValue),
-                            $optType.maxlen)
-        return nil
-      result.valueText = optValue
+  of TYPE_STRING:
+    if len(optValue) == 0:
+      optErrText = "Empty value"
+      return nil
+    if len(optValue) > optType.maxlen:
+      optErrText = format("Length $# exceeds option maximum $#", $len(optValue),
+                          $optType.maxlen)
+      return nil
+    result.valueText = optValue
 
 proc validateHexPayload(payText: string): bool =
   # Strip whitespace including newlines from the provided text, and save as
@@ -468,7 +475,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       igSetNextItemWidth(180 + max(0, igGetWindowContentRegionWidth() - 430))
       optType = optionTypes[optNameIndex]
       case optType.id
-      of COAP_OPTION_CONTENT_FORMAT:
+      of COAP_OPTION_ACCEPT, COAP_OPTION_CONTENT_FORMAT:
         if igComboNamedObj[NamedId]("##optValue", cfNameIndex, cfList):
           isChangedOption = true
       else:

@@ -35,9 +35,13 @@ import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils, tables
 import comsg, conet_ctx, etsi_plug, exp_resources
 # Provides the core context data for conet module users to share
-export comsg, conet_ctx, COAP_OPTION_LOCATION_PATH, COAP_OPTION_CONTENT_FORMAT,
-  COAP_OPTION_BLOCK2
-
+export comsg, conet_ctx, COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2,
+  COAP_OPTION_CONTENT_FORMAT, COAP_OPTION_ETAG, COAP_OPTION_IF_MATCH,
+  COAP_OPTION_IF_NONE_MATCH, COAP_OPTION_LOCATION_PATH, COAP_OPTION_LOCATION_QUERY,
+  COAP_OPTION_MAXAGE, COAP_OPTION_NORESPONSE, COAP_OPTION_OBSERVE,
+  COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_URI_HOST,
+  COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
+  COAP_OPTION_SIZE1, COAP_OPTION_SIZE2
 
 type
   ServerConfig* = ref object
@@ -242,8 +246,11 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
                                  option.valueInt)
       optlist = newOptlist(option.optNum.uint16, valLen, cast[ptr uint8](buf.addr))
     of TYPE_OPAQUE:
-      optlist = newOptlist(option.optNum.uint16, len(option.valueChars).csize_t,
-                           cast[ptr uint8](option.valueChars[0].addr))
+      if len(option.valueChars) == 0:
+        optlist = newOptlist(option.optNum.uint16, 0.csize_t, nil)
+      else:
+        optlist = newOptlist(option.optNum.uint16, len(option.valueChars).csize_t,
+                             cast[ptr uint8](option.valueChars[0].addr))
     of TYPE_STRING:
       optlist = newOptlist(option.optNum.uint16, len(option.valueText).csize_t,
                            cast[ptr uint8](option.valueText.cstring))

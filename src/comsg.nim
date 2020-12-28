@@ -61,7 +61,7 @@ const optionTypesTable* = {
   COAP_OPTION_CONTENT_FORMAT: (id: COAP_OPTION_CONTENT_FORMAT, dataType: TYPE_UINT,   maxlen:    2, name: "Content-Format"),
   COAP_OPTION_ETAG:           (id: COAP_OPTION_ETAG,           dataType: TYPE_OPAQUE, maxlen:    8, name: "ETag"),
   COAP_OPTION_IF_MATCH:       (id: COAP_OPTION_IF_MATCH,       dataType: TYPE_OPAQUE, maxlen:    8, name: "If-Match"),
-  COAP_OPTION_IF_NONE_MATCH:  (id: COAP_OPTION_IF_NONE_MATCH,  dataType: TYPE_UINT,   maxlen:    1, name: "If-None-Match"),
+  COAP_OPTION_IF_NONE_MATCH:  (id: COAP_OPTION_IF_NONE_MATCH,  dataType: TYPE_OPAQUE, maxlen:    0, name: "If-None-Match"),
   COAP_OPTION_LOCATION_PATH:  (id: COAP_OPTION_LOCATION_PATH,  dataType: TYPE_STRING, maxlen:  255, name: "Location-Path"),
   COAP_OPTION_LOCATION_QUERY: (id: COAP_OPTION_LOCATION_QUERY, dataType: TYPE_STRING, maxlen:  255, name: "Location-Query"),
   COAP_OPTION_MAXAGE:         (id: COAP_OPTION_MAXAGE,         dataType: TYPE_UINT,   maxlen:    4, name: "Max-Age"),
