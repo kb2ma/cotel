@@ -174,17 +174,14 @@ proc showWindow*() =
 
   igAlignTextToFramePadding()
   igText("Key")
-  if config.secEnable:
-    igSameLine(60)
-  else:
-    igSameLine()
-    helpMarker("Decoded key may be up to 16 bytes long")
-    igSameLine()
+  igSameLine(60)
   igSetNextItemWidth(300)
   if config.secEnable:
     igText(pskKey)
   else:
     discard igInputTextCap("##pskKey", pskKey, 64)
+    igSameLine()
+    helpMarker("Key in format at right, and may be up to 16 bytes long when decoded")
 
   igSameLine()
   igSetNextItemWidth(80)
@@ -194,8 +191,6 @@ proc showWindow*() =
     var pskFormatIndex = pskFormatId.int
     if igComboString("##keyFormat", pskFormatIndex, formatItems):
       pskFormatId = cast[PskKeyFormat](pskFormatIndex)
-    igSameLine()
-    helpMarker("format for key")
 
   igItemSize(ImVec2(x:0,y:12))
 
