@@ -32,7 +32,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui, imgui/[impl_opengl, impl_glfw], nimgl/[opengl, glfw]
-import json, logging, tables, threadpool, parseOpt, std/jsonutils
+import json, logging, tables, threadpool, parseOpt, std/jsonutils, strutils
 import conet, gui/[client, localhost, netlog, util]
 
 # Disables these warnings for gui_... module imports above. The modules actually
@@ -154,6 +154,12 @@ proc main(conf: CotelConf) =
   # seems like a bug to require manual cast of NavEnableKeyboard
   #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
   igStyleColorsClassic()
+  # Make window background opaque and lighten color so not pitch black.
+  let bgColor = igGetStyleColorVec4(ImGuiCol.WindowBg)
+  bgColor.w = 1.0
+  bgColor.x = 35/255
+  bgColor.y = 35/255
+  bgColor.z = 35/255
 
   # Initialize default proportional font and monospaced font.
   let fAtlas = io.fonts
