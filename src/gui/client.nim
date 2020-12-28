@@ -644,7 +644,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         igText(MessageOptionView(o.ctx).typeLabel)
         igNextColumn()
         # Display with Text colors, but use InputText widget to allow copy text.
-        # Also, red
+        # Also eliminate frame padding so same height as a Text widget.
         igPushStyleColor(ImGuiCol.FrameBg, childBgColor[])
         igPushStyleVar(ImGuiStyleVar.FramePadding, ImVec2(x:0f, y:0f))
         discard igInputTextCap(format("##respOption$#",$i),

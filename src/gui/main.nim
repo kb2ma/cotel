@@ -1,13 +1,13 @@
 ## Application main and GUI for Cotel libcoap server and client.
 ##
 ## For the back end, uses [conet](conet.html) for CoAP neworking. Uses
-## [gui_util](gui_util.html) to read configuration file.
+## [gui/util](gui/util.html) to read configuration file.
 ##
 ## For the UI, uses:
 ##
-##  * [gui_client](gui_client.html) for client request
-##  * [gui_local_server](gui_local_server.html) for local server setup
-##  * [gui_netlog](gui_netlog.html) for network log
+##  * [gui/client](gui/client.html) for client request
+##  * [gui/local_server](gui/local_server.html) for local server setup
+##  * [gui/netlog](gui/netlog.html) for network log
 ##
 ## # Conet - GUI Communication
 ## Conet operates in its own thread to manage network communication. It
