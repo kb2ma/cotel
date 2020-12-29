@@ -123,6 +123,14 @@ proc init*(defaultTokenLen: int) =
   childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
   tokenLen = -1 * defaultTokenLen
 
+proc buildToken(): string =
+  ## Builds and returns a message token as a string based on 'tokenLen'.
+  ## Returns empty string if tokens are not used.
+  if tokenLen > 0:
+    let tokenInt = rand(uint64)
+    for i in 0 ..< tokenLen:
+      result.add(((tokenInt and (0xFF'u64 shl (8*i))) shr (8*i)).char)
+
 proc sendRequestNextBlock(lastBlock: MessageOption) =
   ## Requests the next response block (Block2) in sequence. The new/revised
   ## Block2 option will not be added to the displayed request options.
@@ -149,9 +157,9 @@ proc sendRequestNextBlock(lastBlock: MessageOption) =
   var jNode = %*
     { "msgType": msgType, "uriPath": $reqPath.cstring,
       "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-      "remPort": reqPort, "method": reqMethodIndex+1,
+      "remPort": reqPort, "method": reqMethodIndex+1, "token": buildToken(),
       "reqOptions": toJson(nextOptions), "payload": reqPayload }
-  echo("Requesting block " & $(lastValue.num + 1))
+  #echo("Requesting block " & $(lastValue.num + 1))
   ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
 
 proc buildValueLabel(optType: OptionType, o: MessageOption): string =
@@ -215,7 +223,7 @@ proc onNetMsgRequest*(msg: CoMsg) =
     respMsgHasMore = false
     var lastBlock: MessageOption
     for optJson in msgJson["options"]:
-      echo("resp option " & $optJson)
+      #echo("resp option " & $optJson)
       let option = jsonTo(optJson, MessageOption)
       if option.optNum == COAP_OPTION_BLOCK2:
         respMsgHasMore = readBlockValue(option).more
@@ -570,16 +578,11 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     var msgType: string
     if reqConfirm: msgType = "CON" else: msgType = "NON"
 
-    # Generate token
+    # Initialize random number generator on first request by the user, based
+    # on negative token length as a flag value.
     if tokenLen < 0:
-      # Initialize random number generator on first request by the user.
       randomize()
       tokenLen *= -1
-    var token: string
-    if tokenLen > 0:
-      let tokenInt = rand(uint64)
-      for i in 0 ..< tokenLen:
-        token.add(((tokenInt and (0xFF'u64 shl (8*i))) shr (8*i)).char)
 
     var isValidPayload = true
     case reqPayFormatIndex.PayloadFormats
@@ -591,7 +594,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       var jNode = %*
         { "msgType": msgType, "uriPath": $reqPath.cstring,
           "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
-          "remPort": reqPort, "method": reqMethodIndex+1, "token": token,
+          "remPort": reqPort, "method": reqMethodIndex+1, "token": buildToken(),
           "reqOptions": toJson(reqOptions), "payload": reqPayload }
       ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true

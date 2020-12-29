@@ -20,6 +20,19 @@ type ValueBuffer = array[0..7, char]
 #
 var testContents = "A. Corelli"
 
+proc logHandled(`method`: string, path: string, session: CSession, req: CPdu,
+                token: CCoapString) =
+  ## Convenience function for handlers.
+  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
+  var tokenSeq = newSeq[char](token.length)
+  copyMem(tokenSeq[0].addr, token.s, token.length)
+  var tokenHex: string
+  for c in tokenSeq:
+    tokenHex.add(toHex(cast[int](c), 2))
+    tokenHex.add(' ')
+  oplog.log(lvlInfo, format("Handled $# $# from $#, ID $#, token $#", `method`,
+            path, remote, req.tid, if len(tokenHex) > 0: tokenHex else: "<none>"))
+
 proc handleTestGet(context: CContext, resource: CResource, session: CSession,
                    req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
                    {.exportc: "hnd_test_get", noconv.} =
@@ -42,9 +55,8 @@ proc handleTestGet(context: CContext, resource: CResource, session: CSession,
     discard addOptlistPdu(resp, addr optlist)
 
     discard addData(resp, len(testContents).csize_t, testContents)
-    
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  oplog.log(lvlInfo, format("GET /test from $#", remote))
+
+  logHandled("GET", "/test", session, req, token)
 
 proc handleTestPut(context: CContext, resource: CResource, session: CSession,
                    req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -72,8 +84,7 @@ proc handleTestPut(context: CContext, resource: CResource, session: CSession,
     copyMem(addr dataStr[0], dataPtr, dataLen)
     testContents = dataStr
 
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  oplog.log(lvlInfo, format("PUT /test from $#", remote))
+  logHandled("PUT", "/test", session, req, token)
 
 proc handleTestPost(context: CContext, resource: CResource, session: CSession,
                    req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -108,8 +119,7 @@ proc handleTestPost(context: CContext, resource: CResource, session: CSession,
                              cast[ptr uint8](path[0].addr))
     discard addOptlistPdu(resp, addr optlist)
 
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  oplog.log(lvlInfo, format("POST /test from $#", remote))
+  logHandled("POST", "/test", session, req, token)
 
 proc handleTestDelete(context: CContext, resource: CResource, session: CSession,
                    req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
@@ -125,8 +135,7 @@ proc handleTestDelete(context: CContext, resource: CResource, session: CSession,
     resp.code = COAP_RESPONSE_CODE_404  # Not Found
 
   testContents = ""
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  oplog.log(lvlInfo, format("DELETE /test from $#", remote))
+  logHandled("DELETE", "/test", session, req, token)
 
 #
 # /validate resource, for ETag
@@ -186,8 +195,7 @@ proc handleValidateGet(context: CContext, resource: CResource, session: CSession
     let contents = valSourceItems[valSourceIndex]
     discard addData(resp, len(contents).csize_t, contents)
     
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  oplog.log(lvlInfo, format("GET /validate from $#", remote))
+  logHandled("GET", "/validate", session, req, token)
 
 proc initResources*(ctx: CContext) =
   var r = initResource(makeStringConst("test"), 0)

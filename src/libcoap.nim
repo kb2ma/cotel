@@ -147,6 +147,16 @@ type
     ## coap_pdu_t
     `type`*: uint8
     code*: uint8
+    max_hdr_size: uint8
+    hdr_size: uint8
+    token_length*: uint8
+    tid*: uint16
+    max_delta: uint16
+    alloc_size: csize_t
+    used_size: csize_t
+    max_size: csize_t
+    token*: ptr uint8
+    data: ptr uint8
 
   COptlist* = ptr object
 
@@ -164,6 +174,8 @@ type
 
   CCoapString* {.importc: "struct coap_string_t",
                  header: "<coap2/str.h>"} = ptr object
+    length*: csize_t
+    s*: ptr uint8
 
   CRequestHandler* = proc (context: CContext, resource: CResource,
                            session: CSession, req: CPdu, token: CCoapString,

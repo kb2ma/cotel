@@ -109,6 +109,16 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
     oplog.log(lvlError, "Error reading response: " & getCurrentExceptionMsg())
     return
 
+  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
+  var tokenSeq = newSeq[uint8](received.token_length)
+  copyMem(tokenSeq[0].addr, received.token, received.token_length)
+  var tokenHex: string
+  for c in tokenSeq:
+    tokenHex.add(toHex(cast[int](c), 2))
+    tokenHex.add(' ')
+  oplog.log(lvlInfo, format("Got response from $#, ID $#, token $#", remote, id,
+                            tokenHex))
+
   var jNode = %* { "code": codeStr, "options": toJson(options),
                    "payload": dataStr }
   netChan.send( CoMsg(subject: "response.payload", payload: $jNode) )
@@ -202,8 +212,9 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   else:
     msgType = COAP_MESSAGE_NON
 
-  var pdu = initPdu(msgType, reqJson["method"].getInt().uint8,
-                    newMessageId(session), maxSessionPduSize(session))
+  let msgId = newMessageId(session)
+  var pdu = initPdu(msgType, reqJson["method"].getInt().uint8, msgId,
+                    maxSessionPduSize(session))
   if pdu == nil:
     releaseSession(session)
     raise newException(ConetError, "Can't create client PDU")
@@ -276,6 +287,15 @@ proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
   # send
   if send(session, pdu) == COAP_INVALID_TXID:
     deletePdu(pdu)
+  else:
+    let methodEnum = $reqJson["method"].getInt().CRequestCode
+    var tokenHex: string
+    for c in token:
+      tokenHex.add(toHex(cast[int](c), 2))
+      tokenHex.add(' ')
+    oplog.log(lvlInfo, format("Sent $# $# to $#, ID $#, token $#",
+              methodEnum.split('_')[2], uriPath, host, $msgId,
+              if len(tokenHex) == 0: "<none>" else: tokenHex))
 
 proc createEndpoint(ctx: CContext, listenAddr: string, port: int,
                     proto: CProto): CEndpoint =
