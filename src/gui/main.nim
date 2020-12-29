@@ -178,6 +178,7 @@ proc main(conf: CotelConf) =
   # Not using keyboard nav; as is it doesn't mark a listbox item as selected.
   # seems like a bug to require manual cast of NavEnableKeyboard
   #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
+  io.iniFilename = "cotel.dat"
   igStyleColorsClassic()
   # Make window background opaque and lighten color so not pitch black.
   let bgColor = igGetStyleColorVec4(ImGuiCol.WindowBg)
