@@ -104,17 +104,14 @@ proc checkNetworkLog*() =
 
 proc showNetlogWindow*() =
   igSetNextWindowSize(ImVec2(x: 500, y: 300), FirstUseEver)
-  # fill entire window
-  igPushStyleVar(WindowPadding, ImVec2(x: 0, y: 4))
   igBegin("Network Log", isNetlogOpen.addr)
-  igPopStyleVar()
 
-  # Header selections
-  igSameLine(10)
+  # Header
+  igPushStyleVar(ImGuiStyleVar.FramePadding, ImVec2(x: 4, y: 2))
   igAlignTextToFramePadding()
   igText("Log Level")
   igSameLine()
-  igSetNextItemWidth(100)
+  igSetNextItemWidth(90)
   if igComboString("##level", levelIndex, levelItems):
     filterChars = @[]
     if levelIndex >= 1:
@@ -124,26 +121,26 @@ proc showNetlogWindow*() =
     if levelIndex >= 3:
       filterChars.add('W')
 
-  igSameLine(200)
+  igSameLine(190)
   if igButton("Clear") or isEnterPressed():
     logLines = newSeqOfCap[string](LOG_LINES_MAX + BUFFER_LINES_MAX)
     for i in 0 ..< LOG_LINES_MAX:
       guiLines[i] = ""
-  igSameLine(260)
+  igSameLine(250)
   igText("Scroll to bottom")
   igSameLine()
   igCheckbox("##bottomCheckbox", isScrollToBottom.addr)
+  igPopStyleVar()
   igSeparator()
 
   # List of log items
   var winSize: ImVec2
   igGetWindowContentRegionMaxNonUDT(winSize.addr)
-  igItemSize(ImVec2(x:0,y:5))
-  igBeginChild("NetlogChild", ImVec2(x:winSize.x, y:winSize.y - 75))
+  igItemSize(ImVec2(x:0,y:2))
+  igBeginChild("NetlogChild", ImVec2(x:winSize.x, y:winSize.y - 80), false,
+               HorizontalScrollbar)
 
   for i in 0 ..< guiLen:
-    igItemSize(ImVec2(x:3,y:0))
-    igSameLine()
     igText(guiLines[i])
     if isScrollToBottom and i == (guiLen - 1):
       igSetScrollHereY(1f)
