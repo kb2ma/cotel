@@ -14,7 +14,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import json, logging, math, sequtils
+import json, logging, sequtils
 import conet, gui/util
 
 const
@@ -37,14 +37,14 @@ var
     ## lines of C strings for ImGui, derived from logLInes
   guiLen = 0
     ## count of lines in guiLines; less than LOG_LINES_MAX until it fills up
-  selectedLine = 0'i32
-    ## index of user selected line
   levelIndex = 0
     ## selected minimum log level
   filterChars = cast[seq[char]](@[])
     ## Characters to filter against when reading new lines in network log. For
-    ## example, if filter includes'D', debug log level messages will be
+    ## example, if filter includes 'D', debug log level messages will be
     ## excluded from display.
+  isScrollToBottom = true
+    ## For check box
 
 proc initNetworkLog*() =
   ## Initializes network log infrastructure. Call at app startup.
@@ -109,6 +109,7 @@ proc showNetlogWindow*() =
   igBegin("Network Log", isNetlogOpen.addr)
   igPopStyleVar()
 
+  # Header selections
   igSameLine(10)
   igAlignTextToFramePadding()
   igText("Log Level")
@@ -128,17 +129,23 @@ proc showNetlogWindow*() =
     logLines = newSeqOfCap[string](LOG_LINES_MAX + BUFFER_LINES_MAX)
     for i in 0 ..< LOG_LINES_MAX:
       guiLines[i] = ""
+  igSameLine(260)
+  igText("Scroll to bottom")
+  igSameLine()
+  igCheckbox("##bottomCheckbox", isScrollToBottom.addr)
+  igSeparator()
 
+  # List of log items
   var winSize: ImVec2
   igGetWindowContentRegionMaxNonUDT(winSize.addr)
-  igSetNextItemWidth(winSize.x)
+  igItemSize(ImVec2(x:0,y:5))
+  igBeginChild("NetlogChild", ImVec2(x:winSize.x, y:winSize.y - 75))
 
-  # Calculate height of listbox in units of items. Must truncate so listbox not
-  # taller than containing window due to how igListBox() works. To get bottom
-  # of list box flush with bottom of window, call igListBoxHeader(). In this
-  # case must fill in listbox items manually here.
-  var heightInItems = winSize.y / igGetTextLineHeightWithSpacing()
-  heightInItems = trunc(heightInItems) - 4
-  igListBox("##netlist", selectedLine.addr, guiLines[0].addr, guiLen.int32,
-            heightInItems.int32)
+  for i in 0 ..< guiLen:
+    igItemSize(ImVec2(x:3,y:0))
+    igSameLine()
+    igText(guiLines[i])
+    if isScrollToBottom and i == (guiLen - 1):
+      igSetScrollHereY(1f)
+  igEndChild()
   igEnd()
