@@ -44,6 +44,7 @@ const
     ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
   VERSION = "0.3"
   CONF_FILE = "cotel.conf"
+  DATA_FILE = "cotel.dat"
   GUI_LOG_FILE = "gui.log"
   NET_LOG_FILE = "net.log"
 
@@ -54,9 +55,13 @@ var
   isAboutOpen = false
     ## Is About window open?
   confDir: string
-    ## Name of directory containing configuration files like cotel.conf
+    ## Name of directory containing configuration files like cotel.conf,
+    ## including trailing separator.
   dataDir: string
-    ## Name of directory containing data files like log files
+    ## Name of directory containing data files like log files, including
+    ## trailing separator
+  cotelData: CotelData
+    ## Runtime data object
 
 # Font definitions embedded in source code to avoid filesystem lookup issues.
 # Definitions included separately due to size.
@@ -146,6 +151,8 @@ proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl
   ## Callback from GLFW that uses updated width/height of FB. Helps prevent
   ## window jumpiness when user vertically resizes OS window frame.
   glfwSwapInterval(0)
+  cotelData.windowSize = @[width.int, height.int]
+  cotelData.isChanged = true
   renderUi(w, width, height)
   glfwSwapInterval(1)
 
@@ -170,8 +177,10 @@ proc main(conf: CotelConf) =
   glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE)
   glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
 
-  let w = glfwCreateWindow(conf.windowSize[0].int32, conf.windowSize[1].int32,
-                           "Cotel")
+  cotelData = readDataFile(dataDir & DATA_FILE)
+
+  let w = glfwCreateWindow(cotelData.windowSize[0].int32,
+                           cotelData.windowSize[1].int32, "Cotel")
   if w == nil:
     quit(QuitFailure)
   discard setFramebufferSizeCallback(w, framebufferSizeCallback)
@@ -214,6 +223,8 @@ proc main(conf: CotelConf) =
     if loopCount >= TICK_FREQUENCY:
       loopCount = 0
       checkNetworkLog(logPathname)
+      if cotelData.isChanged:
+        saveDataFile(dataDir & DATA_FILE, cotelData)
 
     var fbWidth, fbHeight: int32
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
@@ -229,7 +240,6 @@ proc main(conf: CotelConf) =
 
 
 # Parse command line options.
-var confName = ""
 var p = initOptParser()
 while true:
   p.next()

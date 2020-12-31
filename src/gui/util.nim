@@ -27,6 +27,13 @@ type
     tokenLen*: int
     windowSize*: seq[int]
 
+  CotelData* = ref object
+    ## Runtime data for Cotel app.
+    isChanged*: bool
+      ## Indicates this object has been updated, and needs to be persisted.
+    windowSize*: seq[int]
+      ## Size of top level window, in pixels
+
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
   ## *confName* must not be empty!
@@ -91,8 +98,32 @@ proc readConfFile*(confName: string): CotelConf =
   # GUI section
   let tGui = toml["GUI"]
   result.windowSize = tGui["window_size"].getElems().mapIt(it.getInt())
-
   oplog.log(lvlInfo, "Conf file read OK")
+
+proc readDataFile*(pathName: string): CotelData =
+  ## Builds runtime data object from entries in file, or from defaults
+  ## *pathName* must not be empty!
+  result = CotelData()
+  result.isChanged = false
+  try:
+    let toml = parseFile(pathName)
+    # GUI section
+    let tGui = toml["GUI"]
+    result.windowSize = tGui["window_size"].getElems().mapIt(it.getInt())
+  except:
+    oplog.log(lvlInfo, format("Can't read data file $#; using defaults", pathName))
+    result.windowSize = @[ 800, 600 ]
+
+proc saveDataFile*(pathName: string, data: CotelData) =
+  ## Persists data to the provided file. Logs any exception without re-raising.
+  let dataTable = newTTable()
+  dataTable.add("GUI", ?[("window_size", ?data.windowSize)])
+  try:
+    writeFile(pathName, toTomlString(dataTable))
+    data.isChanged = false
+  except:
+    oplog.log(lvlError, format("Can't write data file $#\n$#", pathName,
+                               getCurrentExceptionMsg()))
 
 proc igComboString*(label: string, currentIndex: var int,
                    strList: openArray[string]): bool =

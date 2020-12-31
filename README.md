@@ -51,7 +51,7 @@ Install the generated `cotel` executable, the `cotel.conf` configuration file, a
    $ ./cotel --dev
 ```
 
-`cotel.conf` uses reasonable property defaults, but please review its contents for specifics.
+In development mode, all resources are in the startup directory. `cotel.conf` uses reasonable property defaults, but please review its contents for specifics.
 
 ## Hacking
 If you'd like to make improvements to Cotel, see the [architecture](./doc/architecture.md) document to get started. 
