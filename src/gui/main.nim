@@ -32,7 +32,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui, imgui/[impl_opengl, impl_glfw], nimgl/[opengl, glfw]
-import json, logging, tables, threadpool, parseOpt, std/jsonutils, strutils
+import json, logging, os, tables, threadpool, parseOpt, std/jsonutils, strutils
 import conet, gui/[client, localhost, netlog, util]
 
 # Disables these warnings for gui_... module imports above. The modules actually
@@ -248,19 +248,32 @@ while true:
   of cmdShortOption, cmdLongOption:
     if p.key == "dev":
       # dev mode means all resources are in the startup directory (PWD)
-      confDir = "./"
-      dataDir = "./"
+      confDir = "."
+      normalizePathEnd(confDir, true)
+      dataDir = "."
+      normalizePathEnd(dataDir, true)
     else:
       echo("Option ", p.key, " not understood")
   of cmdArgument:
     echo("Argument ", p.key, " not understood")
 
 if len(confDir) == 0:
-  echo("Configuration directory not defined")
-  quit(QuitFailure)
+  confDir = getConfigDir() & "cotel"
+  normalizePathEnd(confDir, true)
+  if not dirExists(confDir):
+    echo("Config directory not found: " & confDir)
+    quit(QuitFailure)
+
 if len(dataDir) == 0:
-  echo("Data directory not defined")
-  quit(QuitFailure)
+  # Linux-specific
+  dataDir = getEnv("XDG_DATA_HOME", getEnv("HOME").string / ".local/share").string
+  if not dirExists(dataDir):
+    echo("Base data directory not found: " & dataDir)
+    quit(QuitFailure)
+  normalizePathEnd(dataDir, true)
+  dataDir.add("cotel")
+  normalizePathEnd(dataDir, true)
+  discard existsOrCreateDir(dataDir)
 
 oplog = newFileLogger(dataDir & GUI_LOG_FILE,
                       fmtStr="[$time] $levelname: ", bufSize=0)
