@@ -94,10 +94,6 @@ proc readConfFile*(confName: string): CotelConf =
   # Client section
   let tClient = toml["Client"]
   result.tokenLen = getInt(tClient["token_length"])
-
-  # GUI section
-  let tGui = toml["GUI"]
-  result.windowSize = tGui["window_size"].getElems().mapIt(it.getInt())
   oplog.log(lvlInfo, "Conf file read OK")
 
 proc readDataFile*(pathName: string): CotelData =
