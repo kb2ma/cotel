@@ -8,7 +8,10 @@ import base64, logging, parsetoml, sequtils, strutils
 import imgui
 import conet_ctx
 
-const PSK_KEYLEN_MAX* = 16
+const
+  PSK_KEYLEN_MAX* = 16
+  headingColor* = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
+    ## dull gold color
 
 type
   PskKeyFormat* = enum

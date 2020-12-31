@@ -22,8 +22,6 @@ const
   protoItems = ["coap", "coaps"]
   methodItems = ["GET", "POST", "PUT", "DELETE"]
   payFormatItems = ["Text", "Hex"]
-  headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
-    ## dull gold color
   optListHeight = 80f
 
 # Construct sorted list of content format items from the table of those items,
@@ -569,7 +567,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
   # Send
   igSetCursorPosY(igGetCursorPosY() + 8f)
-  if igButton("Send Request") or (isEnterPressed() and not isEnterHandled):
+  if igButton("Send") or (isEnterPressed() and not isEnterHandled):
     errText = ""
     respCode = ""
     respOptions = newSeq[MessageOption]()
@@ -598,7 +596,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
           "reqOptions": toJson(reqOptions), "payload": reqPayload }
       ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
-  igSameLine(150)
+  igSameLine(labelColWidth)
   if igButton("Reset"):
     resetContents()
 

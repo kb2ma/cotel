@@ -77,7 +77,7 @@ proc showAboutWindow*() =
   igText("Graphical CoAP messaging tool")
   igItemSize(ImVec2(x:70,y:0))
   igSameLine()
-  igText(format("v$#, December 2020", VERSION))
+  igTextColored(headingColor, format("v$#, December 2020", VERSION))
   igItemSize(ImVec2(x:70,y:0))
   igSameLine()
   igText("GitHub: kb2ma/cotel")
@@ -127,14 +127,14 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   # next call to renderUI().
   if igBeginMainMenuBar():
     if igBeginMenu("CoAP"):
-      igMenuItem("Client Request", nil, isRequestOpen.addr)
-      if igMenuItem("Local Host", nil, isLocalhostOpen.addr):
+      igMenuItem("Send Request", nil, isRequestOpen.addr)
+      igEndMenu()
+    if igBeginMenu("Tools"):
+      if igMenuItem("Local Setup", nil, isLocalhostOpen.addr):
         localhost.setPendingOpen()
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
-      igEndMenu()
-    if igBeginMenu("Tools"):
-      igMenuItem("Network Log", nil, isNetlogOpen.addr)
+      igMenuItem("View Network Log", nil, isNetlogOpen.addr)
       igMenuItem("About", nil, isAboutOpen.addr)
       igEndMenu()
     igEndMainMenuBar()

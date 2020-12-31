@@ -18,10 +18,7 @@ type
       ## waiting for config data to display UI
     STATUS_READY
 
-let
-  headingColor = ImVec4(x: 154f/256f, y: 152f/256f, z: 80f/256f, w: 230f/256f)
-    ## dull gold color
-  formatItems = ["hex", "text", "base64"]
+let formatItems = ["hex", "text", "base64"]
 
 var
   isLocalhostOpen* = false
@@ -108,7 +105,7 @@ proc showWindow*() =
     return
 
   igSetNextWindowSize(ImVec2(x: 600, y: 300), FirstUseEver)
-  igBegin("Local Host", isLocalhostOpen.addr)
+  igBegin("Local Setup", isLocalhostOpen.addr)
   # used for table of endpoints
   var colPos = 0f
   let colWidth = 90f
