@@ -43,12 +43,20 @@ const
   TICK_FREQUENCY = 30
     ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
   VERSION = "0.3"
+  CONF_FILE = "cotel.conf"
+  GUI_LOG_FILE = "gui.log"
+  NET_LOG_FILE = "net.log"
 
 var
   monoFont: ptr ImFont
     ## Monospaced font, maintained as a global for use in a callback as well as
     ## from main run loop.
   isAboutOpen = false
+    ## Is About window open?
+  confDir: string
+    ## Name of directory containing configuration files like cotel.conf
+  dataDir: string
+    ## Name of directory containing data files like log files
 
 # Font definitions embedded in source code to avoid filesystem lookup issues.
 # Definitions included separately due to size.
@@ -142,10 +150,11 @@ proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl
   glfwSwapInterval(1)
 
 proc main(conf: CotelConf) =
+  let logPathname = dataDir & NET_LOG_FILE
   ## Initializes and runs display loop. The display mechanism here is idiomatic
   ## for a GLFW/OpenGL3 based ImGui.
   # Init before starting networking so it shows all messages from this session.
-  initNetworkLog()
+  initNetworkLog(logPathname)
 
   # Configure CoAP networking and spawn in a new thread
   let serverConfig = ServerConfig(listenAddr: conf.serverAddr, nosecEnable: false,
@@ -178,7 +187,7 @@ proc main(conf: CotelConf) =
   # Not using keyboard nav; as is it doesn't mark a listbox item as selected.
   # seems like a bug to require manual cast of NavEnableKeyboard
   #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
-  io.iniFilename = "cotel.dat"
+  io.iniFilename = "gui.dat"
   igStyleColorsClassic()
   # Make window background opaque and lighten color so not pitch black.
   let bgColor = igGetStyleColorVec4(ImGuiCol.WindowBg)
@@ -204,7 +213,7 @@ proc main(conf: CotelConf) =
 
     if loopCount >= TICK_FREQUENCY:
       loopCount = 0
-      checkNetworkLog()
+      checkNetworkLog(logPathname)
 
     var fbWidth, fbHeight: int32
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
@@ -227,23 +236,26 @@ while true:
   case p.kind
   of cmdEnd: break
   of cmdShortOption, cmdLongOption:
-    if p.key == "c":
-      if p.val == "":
-        echo("Expected configuration file name")
-      else:
-        confName = p.val
+    if p.key == "dev":
+      # dev mode means all resources are in the startup directory (PWD)
+      confDir = "./"
+      dataDir = "./"
     else:
       echo("Option ", p.key, " not understood")
   of cmdArgument:
     echo("Argument ", p.key, " not understood")
 
-if confName == "":
-  echo("Must provide configuration file")
+if len(confDir) == 0:
+  echo("Configuration directory not defined")
+  quit(QuitFailure)
+if len(dataDir) == 0:
+  echo("Data directory not defined")
   quit(QuitFailure)
 
-oplog = newFileLogger("gui.log", fmtStr="[$time] $levelname: ", bufSize=0)
+oplog = newFileLogger(dataDir & GUI_LOG_FILE,
+                      fmtStr="[$time] $levelname: ", bufSize=0)
 try:
-  main(readConfFile(confName))
+  main(readConfFile(confDir & CONF_FILE))
 except:
   oplog.log(lvlError, "App failure: ", getCurrentExceptionMsg())
   quit(QuitFailure)

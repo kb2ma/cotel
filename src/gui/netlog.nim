@@ -46,21 +46,21 @@ var
   isScrollToBottom = true
     ## For check box
 
-proc initNetworkLog*() =
+proc initNetworkLog*(logFile: string) =
   ## Initializes network log infrastructure. Call at app startup.
   var f: File
-  if open(f, "net.log"):
+  if open(f, logFile):
     logPos = f.getFileSize()
     f.close()
   else:
     # log may not be initialized yet
     logPos = 0
 
-proc checkNetworkLog*() =
+proc checkNetworkLog*(logFile: string) =
   ## Updates contents of UI widget from notification of new log entries in
   ## network log.
   var f: File
-  if not open(f, "net.log"):
+  if not open(f, logFile):
     oplog.log(lvlError, "Unable to open net.log")
     return
 

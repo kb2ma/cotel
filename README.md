@@ -45,10 +45,10 @@ To build Cotel, execute the command below from the top level directory. The comp
 ```
 
 ## Running
-Install the generated `cotel` executable, the `cotel.conf` configuration file, and the `cimgui.so` shared library into a directory. Start Cotel with:
+Install the generated `cotel` executable, the `cotel.conf` configuration file, and the `cimgui.so` shared library into a directory. Start Cotel in development mode with:
 
 ```
-   $ ./cotel -c:cotel.conf
+   $ ./cotel --dev
 ```
 
 `cotel.conf` uses reasonable property defaults, but please review its contents for specifics.
