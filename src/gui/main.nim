@@ -62,6 +62,8 @@ var
     ## trailing separator
   cotelData: CotelData
     ## Runtime data object
+  isDevMode = false
+    ## Uses local config/data files
 
 # Font definitions embedded in source code to avoid filesystem lookup issues.
 # Definitions included separately due to size.
@@ -137,6 +139,10 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
       igMenuItem("View Network Log", nil, isNetlogOpen.addr)
       igMenuItem("About", nil, isAboutOpen.addr)
       igEndMenu()
+    # Display dev mode indicator
+    if isDevMode:
+      igSameLine(120)
+      igTextColored(igGetStyleColorVec4(ImGuiCol.TextDisabled)[], "(dev mode)")
     igEndMainMenuBar()
 
   igRender()
@@ -247,6 +253,7 @@ while true:
   of cmdShortOption, cmdLongOption:
     if p.key == "dev":
       # dev mode means all resources are in the startup directory (PWD)
+      isDevMode = true
       confDir = "."
       normalizePathEnd(confDir, true)
       dataDir = "."
