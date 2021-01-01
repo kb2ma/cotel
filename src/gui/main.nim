@@ -116,7 +116,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   if isRequestOpen:
     showRequestWindow(monoFont)
   if isLocalhostOpen:
-    localhost.showWindow()
+    localhost.showWindow(monoFont)
   if isNetlogOpen:
     showNetlogWindow()
   if isAboutOpen:
@@ -211,7 +211,6 @@ proc main(conf: CotelConf) =
   monoFont = addFontFromMemoryCompressedTTF(fAtlas, unsafeAddr monoFontData, 150389, 16f)
 
   # Provides default values for window from config
-  localhost.init(conf.pskFormat)
   client.init(conf.tokenLen)
 
   var loopCount = 0

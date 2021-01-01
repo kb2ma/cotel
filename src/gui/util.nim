@@ -4,7 +4,7 @@
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
-import base64, logging, parsetoml, sequtils, strutils
+import logging, parsetoml, sequtils, strutils
 import imgui
 import conet_ctx
 
@@ -14,17 +14,11 @@ const
     ## dull gold color
 
 type
-  PskKeyFormat* = enum
-    FORMAT_HEX_DIGITS
-    FORMAT_PLAINTEXT
-    FORMAT_BASE64
-
   CotelConf* = ref object
     ## Configuration data for Cotel app. See src/cotel.conf for details.
     serverAddr*: string
     nosecPort*: int
     secPort*: int
-    pskFormat*: PskKeyFormat
     pskKey*: seq[char]
     pskClientId*: string
     tokenLen*: int
@@ -59,36 +53,13 @@ proc readConfFile*(confName: string): CotelConf =
   let tSec = toml["Security"]
 
   # psk_key is a char/byte array encoded as specified by psk_format.
-  let formatStr = getStr(tSec["psk_format"])
   let keyStr = getStr(tsec["psk_key"])
   let keyLen = keyStr.len()
-  case formatStr
-  of "base64":
-    result.pskFormat = FORMAT_BASE64
-    result.pskKey = toSeq(decode(keyStr))
 
-  of "hex":
-    result.pskFormat = FORMAT_HEX_DIGITS
-    if keyLen mod 2 != 0:
-      raise newException(ValueError,
-                         format("psk_key length $# not a multiple of two", $keyLen))
-    let seqLen = (keyLen / 2).int
-    if seqLen > PSK_KEYLEN_MAX:
-      raise newException(ValueError,
-                         format("psk_key length $# longer than 16", $keyLen))
-    result.pskKey = newSeq[char](seqLen)
-    for i in 0 ..< seqLen:
-      result.pskKey[i] = cast[char](fromHex[int](keyStr.substr(i*2, i*2+1)))
-
-  of "plain":
-    result.pskFormat = FORMAT_PLAINTEXT
-    if keyLen > PSK_KEYLEN_MAX:
-      raise newException(ValueError,
-                         format("psk_key length $# longer than 16", $keyLen))
-    result.pskKey = cast[seq[char]](keyStr)
-  else:
+  if keyLen > PSK_KEYLEN_MAX:
     raise newException(ValueError,
-                       format("psk_format $# not understood", formatStr))
+                       format("psk_key length $# longer than 16", $keyLen))
+  result.pskKey = cast[seq[char]](keyStr)
 
   # client_id is a text string. Client requests use the same PSK key as the
   # local server.
