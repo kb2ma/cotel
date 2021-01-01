@@ -64,6 +64,9 @@ var
     ## Runtime data object
   isDevMode = false
     ## Uses local config/data files
+  imguiIniFile: string
+    ## Name of ImGui window data file. Must us a static variable like this to
+    ## pass to ImGui. We don't know the filename until runtime.
 
 # Font definitions embedded in source code to avoid filesystem lookup issues.
 # Definitions included separately due to size.
@@ -202,7 +205,8 @@ proc main(conf: CotelConf) =
   # Not using keyboard nav; as is it doesn't mark a listbox item as selected.
   # seems like a bug to require manual cast of NavEnableKeyboard
   #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
-  io.iniFilename = "gui.dat"
+  imguiIniFile = dataDir & "gui.dat"
+  io.iniFilename = imguiIniFile
   igStyleColorsClassic()
   # Make window background opaque and lighten color so not pitch black.
   let bgColor = igGetStyleColorVec4(ImGuiCol.WindowBg)
