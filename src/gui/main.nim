@@ -50,6 +50,8 @@ const
   NET_LOG_FILE = "net.log"
 
 var
+  appConfig: CotelConf
+    ## Application configuration, initialized from disk.
   monoFont: ptr ImFont
     ## Monospaced font, maintained as a global for use in a callback as well as
     ## from main run loop.
@@ -147,7 +149,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
       igEndMenu()
     if igBeginMenu("Tools"):
       if igMenuItem("Local Setup", nil, isLocalhostOpen.addr):
-        localhost.setPendingOpen()
+        localhost.setPendingOpen(appConfig, confDir & CONF_FILE)
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
       igMenuItem("View Network Log", nil, isNetlogOpen.addr)
@@ -189,6 +191,8 @@ proc main(conf: CotelConf) =
                                 secEnable: false, secPort: conf.secPort,
                                 pskKey: conf.pskKey, pskClientId: conf.pskClientId)
   spawn netLoop(conetConfig)
+
+  appConfig = conf
 
   # GLFW initialization
   assert glfwInit()

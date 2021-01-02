@@ -15,13 +15,14 @@ const
 
 type
   CotelConf* = ref object
-    ## Configuration data for Cotel app. See src/cotel.conf for details.
+    ## Configuration data for Cotel app. See resources/cotel.conf for details.
     serverAddr*: string
     nosecPort*: int
     secPort*: int
     pskKey*: seq[char]
     pskClientId*: string
     tokenLen*: int
+    # Saved separately in cotel.dat when user changes window size.
     windowSize*: seq[int]
 
   CotelData* = ref object
@@ -63,10 +64,16 @@ proc readConfFile*(confName: string): CotelConf =
   let keyStr = getStr(tsec["psk_key"])
   let keyLen = keyStr.len()
 
-  if keyLen > PSK_KEYLEN_MAX:
+  if keyLen mod 2 != 0:
+    raise newException(ValueError,
+                       format("psk_key length $# not a multiple of two", $keyLen))
+  let seqLen = (keyLen / 2).int
+  if seqLen > PSK_KEYLEN_MAX:
     raise newException(ValueError,
                        format("psk_key length $# longer than 16", $keyLen))
-  result.pskKey = cast[seq[char]](keyStr)
+  result.pskKey = newSeq[char](seqLen)
+  for i in 0 ..< seqLen:
+    result.pskKey[i] = cast[char](fromHex[int](keyStr.substr(i*2, i*2+1)))
 
   # client_id is a text string. Client requests use the same PSK key as the
   # local server.
@@ -76,6 +83,23 @@ proc readConfFile*(confName: string): CotelConf =
   let tClient = toml["Client"]
   result.tokenLen = getInt(tClient["token_length"])
   oplog.log(lvlInfo, "Conf file read OK")
+
+proc saveConfFile*(pathName: string, conf: CotelConf) =
+  ## Persists configuration to the provided file. Logs any exception without
+  ## re-raising.
+  let confTable = newTTable()
+  var pskKey: string
+  for c in conf.pskKey:
+    pskKey.add(toHex(cast[int](c), 2))
+  
+  confTable.add("Server", ?[("listen_addr", ?conf.serverAddr), ("nosecPort", ?conf.nosecPort), ("secPort", ?conf.secPort)])
+  confTable.add("Security", ?[("psk_key", ?pskKey), ("client_id", ?conf.pskClientId)])
+  confTable.add("Client", ?[("token_length", ?conf.tokenLen)])
+  try:
+    writeFile(pathName, toTomlString(confTable))
+  except:
+    oplog.log(lvlError, format("Can't write conf file $#\n$#", pathName,
+                               getCurrentExceptionMsg()))
 
 proc readDataFile*(pathName: string): CotelData =
   ## Builds runtime data object from entries in file, or from defaults

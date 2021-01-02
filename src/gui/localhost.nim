@@ -43,8 +43,10 @@ var
   status = STATUS_INIT
   statusText = ""
     ## result of pressing Save/Execute button
-  config: ConetConfig
+  netConfig: ConetConfig
     ## most recent config received from Conet
+  appConfig: CotelConf
+  appConfFile: string
   # PSK params
   pskKey: string
   keyFormatIndex = FORMAT_HEX.int32
@@ -118,12 +120,12 @@ proc validateTextKey(hexText: string) =
   # Nothing to do; just save as variable 'pskKey'.
   pskKey = hexText
 
-proc updateVars(srcConfig: ConetConfig) =
+proc updateVars(srcNetConfig: ConetConfig) =
   ## Performs common actions when config is updated
-  config = srcConfig
+  netConfig = srcNetConfig
   # seq[char] to string
   pskKey = ""
-  for c in srcConfig.pskKey:
+  for c in srcNetConfig.pskKey:
     pskKey.add(c)
   isTextOnlyKey = true
   for r in runes(pskKey):
@@ -132,34 +134,36 @@ proc updateVars(srcConfig: ConetConfig) =
       break
   keyText = buildKeyText(pskKey, keyFormatIndex.KeyFormats)
   # server params
-  nosecEnable = config.nosecEnable
-  nosecPort = config.nosecPort.int32
-  secEnable = config.secEnable
-  secPort = config.secPort.int32
+  nosecEnable = netConfig.nosecEnable
+  nosecPort = netConfig.nosecPort.int32
+  secEnable = netConfig.secEnable
+  secPort = netConfig.secPort.int32
   listenAddr = newStringOfCap(64)
-  listenAddr.add(config.listenAddr)
+  listenAddr.add(netConfig.listenAddr)
 
-proc onConfigUpdate*(config: ConetConfig) =
+proc onConfigUpdate*(netConfig: ConetConfig) =
   ## Assumes provided config reflects the actual state of conet server
   ## endpoints. So, if the UI requested to enable NoSec, then config.nosecEnable
   ## will be true here if the server endpoint actually is listening now.
-  updateVars(config)
+  updateVars(netConfig)
   setStatus(status, "OK")
 
-proc onConfigError*(config: ConetConfig) =
+proc onConfigError*(netConfig: ConetConfig) =
   ## Assumes provided config reflects the actual state of conet server
   ## endpoints. So, if the update failed to enable PSK, then config.secEnable
   ## will be false here. Point user to the log for details.
-  updateVars(config)
+  updateVars(netConfig)
   setStatus(status, "Error updating; see log")
 
-proc setConfig*(config: ConetConfig) =
+proc setConfig*(netConfig: ConetConfig) =
   ## Sets configuration data when opening the window.
-  updateVars(config)
+  updateVars(netConfig)
   setStatus(STATUS_READY)
 
-proc setPendingOpen*() =
-  ## Window will be opened; waiting for config data in setConfig()
+proc setPendingOpen*(config: CotelConf, confFile: string) =
+  ## Window will be opened; waiting for net config data in setConfig()
+  appConfig = config
+  appConfFile = confFile
   setStatus(STATUS_PENDING_DATA)
 
 proc showWindow*(fixedFont: ptr ImFont) =
@@ -173,7 +177,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
   # Security section
   igTextColored(headingColor, "coaps Pre-shared Key")
   var keyFlags = ImGuiInputTextFlags.None
-  if not config.secEnable:
+  if not netConfig.secEnable:
     igSameLine(260)
     if igRadioButton(keyFormatItems[FORMAT_TEXT.int], keyFormatIndex.addr, 0):
       if validateHexKey(keyText):
@@ -202,7 +206,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
   igSameLine(60)
   igSetNextItemWidth(400)
   igPushFont(fixedFont)
-  if config.secEnable:
+  if netConfig.secEnable:
     igText(keyText)
   else:
     discard igInputTextCap("##pskKey", keyText,
@@ -241,14 +245,14 @@ proc showWindow*(fixedFont: ptr ImFont) =
     colPos += colWidth - shim*2
     igSameLine(colPos)
     igSetNextItemWidth(100)
-    if config.nosecEnable:
+    if netConfig.nosecEnable:
       igText($nosecPort)
     else:
       igInputInt("##nosecPort", nosecPort.addr)
     colPos += colWidth + shim*3
     igSameLine(colPos)
     igSetNextItemWidth(250)
-    if config.nosecEnable or config.secEnable:
+    if netConfig.nosecEnable or netConfig.secEnable:
       igText(listenAddr)
     else:
       discard igInputTextCap("##listenAddr", listenAddr, 64)
@@ -262,7 +266,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
     colPos += colWidth - shim*2
     igSameLine(colPos)
     igSetNextItemWidth(100)
-    if config.secEnable:
+    if netConfig.secEnable:
       igText($secPort)
     else:
       igInputInt("##nosecPort", secPort.addr)
@@ -289,12 +293,21 @@ proc showWindow*(fixedFont: ptr ImFont) =
     # 'isValidKey' here for simplicity. 'statusText' *is* used to display any
     # error below.
     if isValidKey:
-      let config = ConetConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
-                               nosecPort: nosecPort, secEnable: secEnable,
-                               secPort: secPort, pskKey: charSeq,
-                               pskClientId: "cotel")
+      # Send new net config to conet.
+      let netConfig = ConetConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
+                                  nosecPort: nosecPort, secEnable: secEnable,
+                                  secPort: secPort, pskKey: charSeq,
+                                  pskClientId: appConfig.pskClientId)
       ctxChan.send( CoMsg(subject: "config.server.PUT",
-                          token: "local_server.update", payload: $toJson(config)) )
+                          token: "local_server.update", payload: $toJson(netConfig)) )
+      # Save app config to disk.
+      appConfig.serverAddr = listenAddr
+      appConfig.nosecPort = nosecPort
+      appConfig.secPort = secPort
+      appConfig.pskKey = charSeq
+      #appConfig.pskClientId = pskClientId
+      #appConfig.tokenLen = tokenLen
+      saveConfFile(appConfFile, appConfig)
 
   if len(statusText) > 0:
     igSameLine(120)
