@@ -25,14 +25,15 @@
 ## maintains it. For example several properties of the local server, including
 ## NoSec port, may by modified by the gui_local_server window. However, these
 ## properties are passed to the conet module to implement and maintain via a
-## ServerConfig object.
+## ConetConfig object.
 ##
 ## Copyright 2020 Ken Bannister
 ##
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui, imgui/[impl_opengl, impl_glfw], nimgl/[opengl, glfw]
-import json, logging, os, tables, threadpool, parseOpt, std/jsonutils, strutils
+import json, logging, os, tables, threadpool, parseOpt, std/jsonutils, strutils,
+       tempfile
 import conet, gui/[client, localhost, netlog, util]
 
 # Disables these warnings for gui_... module imports above. The modules actually
@@ -57,9 +58,9 @@ var
   confDir: string
     ## Name of directory containing configuration files like cotel.conf,
     ## including trailing separator.
-  dataDir: string
-    ## Name of directory containing data files like log files, including
-    ## trailing separator
+  logDir: string
+    ## Name of temporary directory containing log files, including trailing
+    ## separator.
   cotelData: CotelData
     ## Runtime data object
   isDevMode = false
@@ -96,15 +97,15 @@ proc checkNetChannel() =
     case msgTuple.msg.token
     of "local_server.open":
       localhost.setConfig(jsonTo(parseJson(msgTuple.msg.payload),
-                          ServerConfig))
+                          ConetConfig))
     of "local_server.update":
       if msgTuple.msg.subject == "config.server.RESP":
         # success
         localhost.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload),
-                                 ServerConfig))
+                                 ConetConfig))
       elif msgTuple.msg.subject == "config.server.ERR":
         localhost.onConfigError(jsonTo(parseJson(msgTuple.msg.payload),
-                                ServerConfig))
+                                ConetConfig))
       else:
         doAssert(false, "Message not handled: " & msgTuple.msg.subject)
     else:
@@ -166,18 +167,18 @@ proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl
   glfwSwapInterval(1)
 
 proc main(conf: CotelConf) =
-  let logPathname = dataDir & NET_LOG_FILE
+  let logPathname = logDir & NET_LOG_FILE
   ## Initializes and runs display loop. The display mechanism here is idiomatic
   ## for a GLFW/OpenGL3 based ImGui.
   # Init before starting networking so it shows all messages from this session.
   initNetworkLog(logPathname)
 
   # Configure CoAP networking and spawn in a new thread
-  let serverConfig = ServerConfig(listenAddr: conf.serverAddr, nosecEnable: false,
-                                  nosecPort: conf.nosecPort, secEnable: false,
-                                  secPort: conf.secPort, pskKey: conf.pskKey,
-                                  pskClientId: conf.pskClientId)
-  spawn netLoop(serverConfig)
+  let conetConfig = ConetConfig(logDir: logDir, listenAddr: conf.serverAddr,
+                                nosecEnable: false, nosecPort: conf.nosecPort,
+                                secEnable: false, secPort: conf.secPort,
+                                pskKey: conf.pskKey, pskClientId: conf.pskClientId)
+  spawn netLoop(conetConfig)
 
   # GLFW initialization
   assert glfwInit()
@@ -186,7 +187,7 @@ proc main(conf: CotelConf) =
   glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE)
   glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
 
-  cotelData = readDataFile(dataDir & DATA_FILE)
+  cotelData = readDataFile(confDir & DATA_FILE)
 
   let w = glfwCreateWindow(cotelData.windowSize[0].int32,
                            cotelData.windowSize[1].int32, "Cotel")
@@ -205,7 +206,7 @@ proc main(conf: CotelConf) =
   # Not using keyboard nav; as is it doesn't mark a listbox item as selected.
   # seems like a bug to require manual cast of NavEnableKeyboard
   #io.configFlags = (io.configFlags.int or cast[int](NavEnableKeyboard)).ImGuiConfigFlags
-  imguiIniFile = dataDir & "gui.dat"
+  imguiIniFile = confDir & "gui.dat"
   io.iniFilename = imguiIniFile
   igStyleColorsClassic()
   # Make window background opaque and lighten color so not pitch black.
@@ -233,7 +234,7 @@ proc main(conf: CotelConf) =
       loopCount = 0
       checkNetworkLog(logPathname)
       if cotelData.isChanged:
-        saveDataFile(dataDir & DATA_FILE, cotelData)
+        saveDataFile(confDir & DATA_FILE, cotelData)
 
     var fbWidth, fbHeight: int32
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
@@ -260,8 +261,8 @@ while true:
       isDevMode = true
       confDir = "."
       normalizePathEnd(confDir, true)
-      dataDir = "."
-      normalizePathEnd(dataDir, true)
+      logDir = "."
+      normalizePathEnd(logDir, true)
     else:
       echo("Option ", p.key, " not understood")
   of cmdArgument:
@@ -274,18 +275,12 @@ if len(confDir) == 0:
     echo("Config directory not found: " & confDir)
     quit(QuitFailure)
 
-if len(dataDir) == 0:
-  # Linux-specific
-  dataDir = getEnv("XDG_DATA_HOME", getEnv("HOME").string / ".local/share").string
-  if not dirExists(dataDir):
-    echo("Base data directory not found: " & dataDir)
-    quit(QuitFailure)
-  normalizePathEnd(dataDir, true)
-  dataDir.add("cotel")
-  normalizePathEnd(dataDir, true)
-  discard existsOrCreateDir(dataDir)
+if len(logDir) == 0:
+  logDir = mkdtemp("cotel")
+  normalizePathEnd(logDir, true)
+  echo("logDir " & logDir)
 
-oplog = newFileLogger(dataDir & GUI_LOG_FILE,
+oplog = newFileLogger(logDir & GUI_LOG_FILE,
                       fmtStr="[$time] $levelname: ", bufSize=0)
 try:
   main(readConfFile(confDir & CONF_FILE))

@@ -2,7 +2,7 @@
 ## networking.
 ##
 ## Includes ability to convert a char to/from JSON, as required by the
-## ServerConfig type for use in a CoMsg.
+## ConetConfig type for use in a CoMsg.
 ##
 ## Copyright 2020 Ken Bannister
 ##

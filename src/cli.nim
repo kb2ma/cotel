@@ -29,10 +29,10 @@ proc sendMsg() =
 
 proc main(conf: CotelConf) =
   # Configure CoAP networking and spawn in a new thread
-  let serverConfig = ServerConfig(listenAddr: conf.serverAddr, nosecEnable: false,
-                                  nosecPort: conf.serverPort, pskKey: conf.pskKey,
-                                  pskClientId: conf.pskClientId)
-  spawn netLoop(serverConfig)
+  let conetConfig = ConetConfig(listenAddr: conf.serverAddr, nosecEnable: false,
+                                nosecPort: conf.serverPort, pskKey: conf.pskKey,
+                                pskClientId: conf.pskClientId)
+  spawn netLoop(conetConfig)
 
   # wait asynchronously for user input
   setStdIoUnbuffered()

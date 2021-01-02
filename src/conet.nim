@@ -2,7 +2,7 @@
 ## An application runs Conet in a thread and communicates via the async
 ## channels in the [conet_ctx module](conet_ctx.html).
 ##
-## Start Conet with a call to [netLoop()](conet.html#netLoop%2CServerConfig),
+## Start Conet with a call to [netLoop()](conet.html#netLoop%2CConetConfig),
 ## which monitors network sockets as well as the channels to the enclosing
 ## application. Conet provides two services:
 ##
@@ -44,8 +44,9 @@ export comsg, conet_ctx, COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLO
   COAP_OPTION_SIZE1, COAP_OPTION_SIZE2
 
 type
-  ServerConfig* = ref object
-    # Configuration data for important aspects of the server
+  ConetConfig* = ref object
+    # Configuration data required to operate Conet networking
+    logDir*: string
     listenAddr*: string
     nosecEnable*: bool
     nosecPort*: int
@@ -175,7 +176,7 @@ proc resolveAddress(ctx: CContext, host: string, port: string,
 
   freeaddrinfo(firstInfo)
 
-proc sendMessage(ctx: CContext, config: ServerConfig, jsonStr: string) =
+proc sendMessage(ctx: CContext, config: ConetConfig, jsonStr: string) =
   ## Send a message to exercise client flow with a server.
   let reqJson = parseJson(jsonStr)
 
@@ -310,8 +311,8 @@ proc createEndpoint(ctx: CContext, listenAddr: string, port: int,
         raise newException(ConetError, format("Can't create $# server listener on $#",
                            protoText, $port))
 
-proc updateConfig(state: ConetState, config: ServerConfig,
-                  newConfig: ServerConfig) =
+proc updateConfig(state: ConetState, config: ConetConfig,
+                  newConfig: ConetConfig) =
   ## Starts/Stops local server endpoints based on newConfig.
   ## Updates the xxxEnable vars to reflect the actual state of the endpoint.
   ## So if NoSec is enabled, then config.nosecEnable is set true.
@@ -366,10 +367,11 @@ proc updateConfig(state: ConetState, config: ServerConfig,
     oplog.log(lvlInfo, "Cotel server Secure disabled")
 
 
-proc netLoop*(config: ServerConfig) =
+proc netLoop*(config: ConetConfig) =
   ## Entry point for Conet. Setup server and run event loop. In particular,
   ## establishes libcoap Context and server resources.
-  oplog = newFileLogger("net.log", fmtStr="[$time] $levelname: ", bufSize=0)
+  oplog = newFileLogger(config.logDir & "net.log", fmtStr="[$time] $levelname: ",
+                        bufSize=0)
   let state = ConetState(endpoints: newSeq[CEndpoint](2))
 
   open(netChan)
@@ -411,7 +413,7 @@ proc netLoop*(config: ServerConfig) =
       of "config.server.PUT":
         try:
           updateConfig(state, config,
-                       jsonTo(parseJson(msgTuple.msg.payload), ServerConfig))
+                       jsonTo(parseJson(msgTuple.msg.payload), ConetConfig))
           netChan.send( CoMsg(subject: "config.server.RESP",
                               token: msgTuple.msg.token, payload: $toJson(config)) )
         except CatchableError as e:

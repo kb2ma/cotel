@@ -43,7 +43,7 @@ var
   status = STATUS_INIT
   statusText = ""
     ## result of pressing Save/Execute button
-  config: ServerConfig
+  config: ConetConfig
     ## most recent config received from Conet
   # PSK params
   pskKey: string
@@ -118,7 +118,7 @@ proc validateTextKey(hexText: string) =
   # Nothing to do; just save as variable 'pskKey'.
   pskKey = hexText
 
-proc updateVars(srcConfig: ServerConfig) =
+proc updateVars(srcConfig: ConetConfig) =
   ## Performs common actions when config is updated
   config = srcConfig
   # seq[char] to string
@@ -139,21 +139,21 @@ proc updateVars(srcConfig: ServerConfig) =
   listenAddr = newStringOfCap(64)
   listenAddr.add(config.listenAddr)
 
-proc onConfigUpdate*(config: ServerConfig) =
+proc onConfigUpdate*(config: ConetConfig) =
   ## Assumes provided config reflects the actual state of conet server
   ## endpoints. So, if the UI requested to enable NoSec, then config.nosecEnable
   ## will be true here if the server endpoint actually is listening now.
   updateVars(config)
   setStatus(status, "OK")
 
-proc onConfigError*(config: ServerConfig) =
+proc onConfigError*(config: ConetConfig) =
   ## Assumes provided config reflects the actual state of conet server
   ## endpoints. So, if the update failed to enable PSK, then config.secEnable
   ## will be false here. Point user to the log for details.
   updateVars(config)
   setStatus(status, "Error updating; see log")
 
-proc setConfig*(config: ServerConfig) =
+proc setConfig*(config: ConetConfig) =
   ## Sets configuration data when opening the window.
   updateVars(config)
   setStatus(STATUS_READY)
@@ -289,10 +289,10 @@ proc showWindow*(fixedFont: ptr ImFont) =
     # 'isValidKey' here for simplicity. 'statusText' *is* used to display any
     # error below.
     if isValidKey:
-      let config = ServerConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
-                                nosecPort: nosecPort, secEnable: secEnable,
-                                secPort: secPort, pskKey: charSeq,
-                                pskClientId: "cotel")
+      let config = ConetConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
+                               nosecPort: nosecPort, secEnable: secEnable,
+                               secPort: secPort, pskKey: charSeq,
+                               pskClientId: "cotel")
       ctxChan.send( CoMsg(subject: "config.server.PUT",
                           token: "local_server.update", payload: $toJson(config)) )
 

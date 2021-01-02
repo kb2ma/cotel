@@ -61,7 +61,7 @@ proc checkNetworkLog*(logFile: string) =
   ## network log.
   var f: File
   if not open(f, logFile):
-    oplog.log(lvlError, "Unable to open net.log")
+    oplog.log(lvlError, "Unable to open net log " & logFile)
     return
 
   try:
