@@ -53,8 +53,8 @@ var
   monoFont: ptr ImFont
     ## Monospaced font, maintained as a global for use in a callback as well as
     ## from main run loop.
-  isAboutOpen = false
-    ## Is About window open?
+  isInfoOpen = false
+    ## Is Info window open?
   confDir: string
     ## Name of directory containing configuration files like cotel.conf,
     ## including trailing separator.
@@ -74,21 +74,31 @@ var
 include gui/font
 
 
-proc showAboutWindow*() =
+proc showInfoWindow*() =
   igSetNextWindowSize(ImVec2(x: 320, y: 140), Once)
-  igBegin("About Cotel", isAboutOpen.addr,
+  igBegin("Info", isInfoOpen.addr,
           (ImGuiWindowFlags.NoResize.uint or ImGuiWindowFlags.NoCollapse.uint).ImGuiWindowFlags)
-  igItemSize(ImVec2(x:45,y:0))
-  igSameLine()
-  igText("Graphical CoAP messaging tool")
-  igItemSize(ImVec2(x:70,y:0))
-  igSameLine()
-  igTextColored(headingColor, format("v$#, December 2020", VERSION))
-  igItemSize(ImVec2(x:70,y:0))
-  igSameLine()
-  igText("GitHub: kb2ma/cotel")
-  igItemSize(ImVec2(x:0,y:15))
-  igText("See LICENSE file for copyright and components")
+  let labelColWidth = 90f
+
+  #igAlignTextToFramePadding()
+  igText("Log directory")
+  igSameLine(labelColWidth + 20)
+  igPushStyleColor(ImGuiCol.FrameBg, childBgColor[])
+  igPushStyleVar(ImGuiStyleVar.FramePadding, ImVec2(x:0f, y:0f))
+  discard igInputTextCap("##logDir", logDir, len(logDir),
+                         flags = ImGuiInputTextFlags.ReadOnly)
+  igPopStyleVar()
+  igPopStyleColor()
+  igSeparator()
+
+  igItemSize(ImVec2(x:0,y:5))
+  igTextColored(headingColor, "About Cotel")
+  igText("Version")
+  igSameLine(labelColWidth)
+  igText(format("v$#, January 2021", VERSION))
+  igText("Home")
+  igSameLine(labelColWidth)
+  igText("github.com/kb2ma/cotel")
   igEnd()
 
 proc checkNetChannel() =
@@ -125,8 +135,8 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
     localhost.showWindow(monoFont)
   if isNetlogOpen:
     showNetlogWindow()
-  if isAboutOpen:
-    showAboutWindow()
+  if isInfoOpen:
+    showInfoWindow()
 
   # Place menuing setup *below* window setup so menu can set particular window
   # options when selected. Then make first pass at displaying the window on the
@@ -141,7 +151,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
       igMenuItem("View Network Log", nil, isNetlogOpen.addr)
-      igMenuItem("About", nil, isAboutOpen.addr)
+      igMenuItem("Info", nil, isInfoOpen.addr)
       igEndMenu()
     # Display dev mode indicator
     if isDevMode:
@@ -223,6 +233,7 @@ proc main(conf: CotelConf) =
 
   # Provides default values for window from config
   client.init(conf.tokenLen)
+  util.init()
 
   var loopCount = 0
   while not w.windowShouldClose:

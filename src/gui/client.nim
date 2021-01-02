@@ -62,8 +62,6 @@ var
     ## Enclosing context sets this value
   isNewOption = false
     ## True if editing a new option
-  childBgColor: ptr ImVec4
-    ## Cache value for use in display loop; initialized below in init()
   tokenLen: int
     ## Length of randomly generated token, in bytes. Initialized to the
     ## multiplicative inverse (-tokenLen) as a flag to seed the random module
@@ -118,7 +116,6 @@ var
 
 proc init*(defaultTokenLen: int) =
   ## Initialization triggered by app after ImGui initialized
-  childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
   tokenLen = -1 * defaultTokenLen
 
 proc buildToken(): string =

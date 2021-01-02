@@ -31,6 +31,13 @@ type
     windowSize*: seq[int]
       ## Size of top level window, in pixels
 
+var childBgColor*: ptr ImVec4
+  ## Cache color for use by dependents; initialized below in init()
+
+proc init*() =
+  ## Initialization triggered by app after ImGui initialized
+  childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
+
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
   ## *confName* must not be empty!
