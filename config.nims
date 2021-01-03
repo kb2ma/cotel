@@ -12,6 +12,7 @@ task build, "Build executable":
   switch("out", "cotel")
   switch("outdir", "build/bin") 
   switch("debugger", "native")
+  #switch("define", "release")
   setCommand("c")
 
 task docs, "Build doc html":

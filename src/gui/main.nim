@@ -145,7 +145,7 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
   # next call to renderUI().
   if igBeginMainMenuBar():
     if igBeginMenu("CoAP"):
-      igMenuItem("Send Request", nil, isRequestOpen.addr)
+      igMenuItem("New Request", nil, isRequestOpen.addr)
       igEndMenu()
     if igBeginMenu("Tools"):
       if igMenuItem("Local Setup", nil, isLocalhostOpen.addr):
@@ -264,7 +264,8 @@ proc main(conf: CotelConf) =
   glfwTerminate()
 
 
-# Parse command line options.
+# Parse command line options and ensure application config/log files are
+# available.
 var p = initOptParser()
 while true:
   p.next()
@@ -286,8 +287,13 @@ while true:
 if len(confDir) == 0:
   confDir = getConfigDir() & "cotel"
   normalizePathEnd(confDir, true)
-  if not dirExists(confDir):
-    echo("Config directory not found: " & confDir)
+  if not existsOrCreateDir(confDir):
+    echo("Can't find/create config directory: " & confDir)
+    quit(QuitFailure)
+let confPathname = confDir & CONF_FILE
+if not fileExists(confPathname):
+  if not saveConfFile(confPathname, createDefaultConfFile()):
+    echo("Can't create config file: " & confPathname)
     quit(QuitFailure)
 
 if len(logDir) == 0:

@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Cotel
-Comment=Graphical CoAP messaging tool
+Comment=CoAP messaging GUI tool
 Exec=/home/kbee/dev/cotel/share/run/run.sh
 Icon=/home/kbee/dev/cotel/repo/resources/cotel32.png
 Type=Application

@@ -39,6 +39,16 @@ proc init*() =
   ## Initialization triggered by app after ImGui initialized
   childBgColor = igGetStyleColorVec4(ImGuiCol.ChildBg)
 
+proc createDefaultConfFile*(): CotelConf =
+  ## Creates a default application configuration file.
+  result = CotelConf()
+  result.serverAddr = "::"
+  result.nosecPort = 5683
+  result.secPort = 5684
+  # result.pskKey nil
+  result.pskClientId = "cotel"
+  result.tokenLen = 2
+
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
   ## *confName* must not be empty!
@@ -84,9 +94,9 @@ proc readConfFile*(confName: string): CotelConf =
   result.tokenLen = getInt(tClient["token_length"])
   oplog.log(lvlInfo, "Conf file read OK")
 
-proc saveConfFile*(pathName: string, conf: CotelConf) =
+proc saveConfFile*(pathName: string, conf: CotelConf): bool =
   ## Persists configuration to the provided file. Logs any exception without
-  ## re-raising.
+  ## re-raising, but return value indicates success/failure.
   let confTable = newTTable()
   var pskKey: string
   for c in conf.pskKey:
@@ -100,6 +110,8 @@ proc saveConfFile*(pathName: string, conf: CotelConf) =
   except:
     oplog.log(lvlError, format("Can't write conf file $#\n$#", pathName,
                                getCurrentExceptionMsg()))
+    return false
+  return true
 
 proc readDataFile*(pathName: string): CotelData =
   ## Builds runtime data object from entries in file, or from defaults

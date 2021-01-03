@@ -37,6 +37,7 @@ const
   keyFormatItems = ["Text", "Hex"]
   # 16 pairs of hex digits with 15 spaces in between
   keyTextCapacity = (PSK_KEYLEN_MAX * 2) + PSK_KEYLEN_MAX
+  clientIdCapacity = 16
 
 var
   isLocalhostOpen* = false
@@ -47,11 +48,13 @@ var
     ## most recent config received from Conet
   appConfig: CotelConf
   appConfFile: string
+  tokenLen: int32
   # PSK params
   pskKey: string
   keyFormatIndex = FORMAT_HEX.int32
   keyText = newStringOfCap(keyTextCapacity)
   isTextOnlyKey = false
+  pskClientId = newStringOfCap(clientIdCapacity)
   # server params
   nosecEnable = false
   nosecPort: int32
@@ -123,6 +126,7 @@ proc validateTextKey(hexText: string) =
 proc updateVars(srcNetConfig: ConetConfig) =
   ## Performs common actions when config is updated
   netConfig = srcNetConfig
+  tokenLen = appConfig.tokenLen.int32
   # seq[char] to string
   pskKey = ""
   for c in srcNetConfig.pskKey:
@@ -133,6 +137,7 @@ proc updateVars(srcNetConfig: ConetConfig) =
       isTextOnlyKey = false
       break
   keyText = buildKeyText(pskKey, keyFormatIndex.KeyFormats)
+  pskClientId = appConfig.pskClientId
   # server params
   nosecEnable = netConfig.nosecEnable
   nosecPort = netConfig.nosecPort.int32
@@ -174,6 +179,14 @@ proc showWindow*(fixedFont: ptr ImFont) =
   igSetNextWindowSize(ImVec2(x: 600, y: 300), FirstUseEver)
   igBegin("Local Setup", isLocalhostOpen.addr)
 
+  igTextColored(headingColor, "Request")
+  igAlignTextToFramePadding()
+  igText("Token Length")
+  igSameLine(110)
+  igSetNextItemWidth(80)
+  igInputInt("##tokenLen", tokenLen.addr);
+  igItemSize(ImVec2(x:0,y:4))
+
   # Security section
   igTextColored(headingColor, "coaps Pre-shared Key")
   var keyFlags = ImGuiInputTextFlags.None
@@ -203,7 +216,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
 
   igAlignTextToFramePadding()
   igText("Key")
-  igSameLine(60)
+  igSameLine(80)
   igSetNextItemWidth(400)
   igPushFont(fixedFont)
   if netConfig.secEnable:
@@ -213,16 +226,21 @@ proc showWindow*(fixedFont: ptr ImFont) =
         if keyFormatIndex == FORMAT_TEXT.int32: PSK_KEYLEN_MAX + 1 else: keyTextCapacity,
                            flags = keyFlags)
   igPopFont()
+  igAlignTextToFramePadding()
+  igText("Client ID")
+  igSameLine(80)
+  igSetNextItemWidth(150)
+  discard igInputTextCap("##pskClientId", pskClientId, clientIdCapacity)
 
   igItemSize(ImVec2(x:0,y:8))
 
   # Server endpoints
-  if igCollapsingHeader("Experimental"):
+  if igCollapsingHeader("Server (experimental)"):
     var colPos = 0f
     let colWidth = 90f
     let shim = 10f
 
-    igTextColored(headingColor, "Server Endpoints")
+    igTextColored(headingColor, "Local Endpoints")
     igText("Enable")
     colPos += colWidth - shim
     igSameLine(colPos)
@@ -297,7 +315,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
       let netConfig = ConetConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
                                   nosecPort: nosecPort, secEnable: secEnable,
                                   secPort: secPort, pskKey: charSeq,
-                                  pskClientId: appConfig.pskClientId)
+                                  pskClientId: pskClientId)
       ctxChan.send( CoMsg(subject: "config.server.PUT",
                           token: "local_server.update", payload: $toJson(netConfig)) )
       # Save app config to disk.
@@ -305,9 +323,9 @@ proc showWindow*(fixedFont: ptr ImFont) =
       appConfig.nosecPort = nosecPort
       appConfig.secPort = secPort
       appConfig.pskKey = charSeq
-      #appConfig.pskClientId = pskClientId
-      #appConfig.tokenLen = tokenLen
-      saveConfFile(appConfFile, appConfig)
+      appConfig.pskClientId = pskClientId
+      appConfig.tokenLen = tokenLen
+      discard saveConfFile(appConfFile, appConfig)
 
   if len(statusText) > 0:
     igSameLine(120)
