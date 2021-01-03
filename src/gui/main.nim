@@ -287,8 +287,9 @@ while true:
 if len(confDir) == 0:
   confDir = getConfigDir() & "cotel"
   normalizePathEnd(confDir, true)
-  if not existsOrCreateDir(confDir):
-    echo("Can't find/create config directory: " & confDir)
+  discard existsOrCreateDir(confDir)
+  if not dirExists(confDir):
+    echo("Can't create config directory: " & confDir)
     quit(QuitFailure)
 let confPathname = confDir & CONF_FILE
 if not fileExists(confPathname):
@@ -299,7 +300,6 @@ if not fileExists(confPathname):
 if len(logDir) == 0:
   logDir = mkdtemp("cotel")
   normalizePathEnd(logDir, true)
-  echo("logDir " & logDir)
 
 oplog = newFileLogger(logDir & GUI_LOG_FILE,
                       fmtStr="[$time] $levelname: ", bufSize=0)
