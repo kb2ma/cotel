@@ -141,7 +141,8 @@ proc showNetlogWindow*() =
                HorizontalScrollbar)
 
   for i in 0 ..< guiLen:
-    igText(guiLines[i])
+    # Must use 'unformatted'. For igText() a '%' is interpreted ala 'printf'.
+    igTextUnformatted(guiLines[i])
     if isScrollToBottom and i == (guiLen - 1):
       igSetScrollHereY(1f)
   igEndChild()
