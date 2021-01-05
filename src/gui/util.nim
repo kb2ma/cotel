@@ -114,7 +114,7 @@ proc saveConfFile*(pathName: string, conf: CotelConf): bool =
   return true
 
 proc readDataFile*(pathName: string): CotelData =
-  ## Builds runtime data object from entries in file, or from defaults
+  ## Builds runtime data object from entries in file, or from defaults.
   ## *pathName* must not be empty!
   result = CotelData()
   result.isChanged = false

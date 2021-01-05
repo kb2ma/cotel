@@ -173,7 +173,8 @@ proc framebufferSizeCallback(w: GLFWWindow, width: int32, height: int32) {.cdecl
   ## Callback from GLFW that uses updated width/height of FB. Helps prevent
   ## window jumpiness when user vertically resizes OS window frame.
   glfwSwapInterval(0)
-  cotelData.windowSize = @[width.int, height.int]
+  cotelData.windowSize[0] = width.int
+  cotelData.windowSize[1] = height.int
   cotelData.isChanged = true
   renderUi(w, width, height)
   glfwSwapInterval(1)
@@ -201,6 +202,7 @@ proc main(conf: CotelConf) =
   glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE)
   glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
 
+  # Creates default data if can't read.
   cotelData = readDataFile(confDir & DATA_FILE)
 
   let w = glfwCreateWindow(cotelData.windowSize[0].int32,
@@ -255,6 +257,13 @@ proc main(conf: CotelConf) =
     getFramebufferSize(w, fbWidth.addr, fbHeight.addr)
     renderUi(w, fbWidth, fbHeight)
     loopCount += 1
+
+  # Save window size on exit to ensure last open Cotel window is saved.
+  var wSize = newSeq[int32](2)
+  getFramebufferSize(w, wSize[0].addr, wSize[1].addr)
+  cotelData.windowSize[0] = wSize[0].int
+  cotelData.windowSize[1] = wSize[1].int
+  saveDataFile(confDir & DATA_FILE, cotelData)
 
   igOpenGL3Shutdown()
   igGlfwShutdown()
