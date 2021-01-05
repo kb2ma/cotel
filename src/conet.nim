@@ -85,7 +85,6 @@ proc fromJsonHook*(a: var MessageOptionContext, b: JsonNode) =
   ## read it.
   a = nil
 
-
 proc handleResponse(context: CContext, session: CSession, sent: CPdu,
                     received: CPdu, id: CTxid)
                     {.exportc: "hnd_response", noconv.} =
@@ -176,6 +175,24 @@ proc resolveAddress(ctx: CContext, host: string, port: string,
 
   freeaddrinfo(firstInfo)
 
+proc doPctDecode(src: string): string =
+  ## Returns a string derived from the input with any percent encodings, like
+  ## "%D6" replaced with the decoded character. Simply returns the input string
+  ## if an encoding is not found.
+  ## Raises a ValueError if an encoding is not valid.
+  if src.find('%') == -1:
+    return src
+  var pos = 0
+  while pos < len(src):
+    if src[pos] == '%':
+      if len(src) < (pos + 1):
+        raise newException(ValueError, "Invalid percent encoding in " & src)
+      result.add(cast[char](fromHex[int8](src.substr(pos+1, pos+2))))
+      pos += 3
+    else:
+      result.add(src[pos])
+      pos += 1
+
 proc sendMessage(ctx: CContext, config: ConetConfig, jsonStr: string) =
   ## Send a message to exercise client flow with a server.
   let reqJson = parseJson(jsonStr)
@@ -232,12 +249,14 @@ proc sendMessage(ctx: CContext, config: ConetConfig, jsonStr: string) =
 
   # Uri-Path from path string
   while pos < uriPath.len:
-    var token: string
-    let plen = parseUntil(uriPath, token, '/', pos)
-    #echo("start pos: ", pos, ", token: ", token, " of len ", plen)
+    var segment: string
+    let plen = parseUntil(uriPath, segment, '/', pos)
+    segment = doPctDecode(segment)
+    #echo("start pos: ", pos, ", segment: ", segment, " of len ", plen)
     if plen > 0:
-      let optlist = newOptlist(COAP_OPTION_URI_PATH.uint16, len(token).csize_t,
-                               cast[ptr uint8](token.cstring))
+      let optlist = newOptlist(COAP_OPTION_URI_PATH.uint16,
+                               len(segment).csize_t,
+                               cast[ptr uint8](segment.cstring))
       if optlist == nil:
         raise newException(ConetError, "Can't create option list")
       if not insertOptlist(addr chain, optlist).bool:
