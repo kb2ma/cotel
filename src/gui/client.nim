@@ -509,7 +509,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     # Include payload for POST or PUT.
     igAlignTextToFramePadding()
     igText("Payload")
-    igSameLine(labelColWidth)
+    igSameLine(labelColWidth * 2)
     # Update payload from current InputText, and reformat. Disallow editing if
     # transitioning from hex to text and contains non-editable chars.
     if igRadioButton(payFormatItems[FORMAT_TEXT.int], reqPayFormatIndex.addr, 0):
@@ -664,7 +664,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       igSetCursorPosY(igGetCursorPosY() + 4f)
       igAlignTextToFramePadding()
       igText("Payload")
-      igSameLine(labelColWidth)
+      igSameLine(labelColWidth * 2)
       if igRadioButton(payFormatItems[FORMAT_TEXT.int], respPayFormatIndex.addr, 0):
         respPayText = buildPayloadText(respPayload, FORMAT_TEXT)
       igSameLine()
