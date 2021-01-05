@@ -17,7 +17,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import json, strutils, std/jsonutils, unicode
+import json, strutils, std/jsonutils
 import conet, gui/util
 
 type
@@ -36,8 +36,9 @@ type
 const
   keyFormatItems = ["Text", "Hex"]
   # 16 pairs of hex digits with 15 spaces in between
-  keyTextCapacity = (PSK_KEYLEN_MAX * 2) + PSK_KEYLEN_MAX
-  clientIdCapacity = 16
+  keyTextCapacity = textCapForMaxlen(PSK_KEYLEN_MAX)
+  clientIdCapacity = textCapForMaxlen(32)
+  listenAddrCapacity = textCapForMaxlen(64)
 
 var
   isLocalhostOpen* = false
@@ -77,20 +78,20 @@ proc setStatus(status: FormStatus, text: string = "") =
   statusText = text
 
 proc buildKeyText(source: string, format: KeyFormats): string =
-  ## Build and return UTF-8 text suitable for PSK key display, based on provided
+  ## Build and return text suitable for PSK key display, based on provided
   ## raw key and output text format.
   # Must initialize to max capacity due to ImGui InputText requirements.
   result = newStringOfCap(keyTextCapacity)
   case format
   of FORMAT_TEXT:
-    # Convert any non-printable ASCII chars to a U00B7 dot.
-    for r in runes(source):
-      if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
+    # Convert any non-printable ASCII char to a U+00B7 dot.
+    for c in source:
+      if (c < ' ') or (c > '~'):
         result.add("\u{B7}")
       else:
-        result.add(toUTF8(r))
+        result.add(c)
   of FORMAT_HEX:
-    # Convert all chars to two-digit hex text, separated by a space.
+    # Convert all chars to two-digit hex text, separated by spaces.
     var isFirst = true
     for c in source:
       if isFirst:
@@ -101,7 +102,7 @@ proc buildKeyText(source: string, format: KeyFormats): string =
 
 proc validateHexKey(hexText: string): bool =
   # Strip whitespace including newlines from the provided text, and save as
-  # variable 'pskKey'.
+  # single byte chars in variable 'pskKey'.
   var stripped = ""
   try:
     for text in strutils.splitWhitespace(hexText):
@@ -111,7 +112,6 @@ proc validateHexKey(hexText: string): bool =
       for i in 0 ..< (len(text) / 2).int:
         #let charInt = fromHex[int](text.substr(i*2, i*2+1))
         #echo(format("char $#", fmt"{charInt:X}"))
-        #stripped.add(cast[char](charInt))
         stripped.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
     pskKey = stripped
   except ValueError:
@@ -124,26 +124,23 @@ proc validateTextKey(hexText: string) =
   pskKey = hexText
 
 proc updateVars(srcNetConfig: ConetConfig) =
-  ## Performs common actions when config is updated
+  ## Update variables for display when config is updated
   netConfig = srcNetConfig
   tokenLen = appConfig.tokenLen.int32
-  # seq[char] to string
+  # seq[char] to pskKey string, and build display text
   pskKey = ""
   for c in srcNetConfig.pskKey:
     pskKey.add(c)
-  isTextOnlyKey = true
-  for r in runes(pskKey):
-    if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
-      isTextOnlyKey = false
-      break
+  isTextOnlyKey = isFullyDisplayable(pskKey)
   keyText = buildKeyText(pskKey, keyFormatIndex.KeyFormats)
+  
   pskClientId = appConfig.pskClientId
   # server params
   nosecEnable = netConfig.nosecEnable
   nosecPort = netConfig.nosecPort.int32
   secEnable = netConfig.secEnable
   secPort = netConfig.secPort.int32
-  listenAddr = newStringOfCap(64)
+  listenAddr = newStringOfCap(listenAddrCapacity)
   listenAddr.add(netConfig.listenAddr)
 
 proc onConfigUpdate*(netConfig: ConetConfig) =
@@ -194,11 +191,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
     igSameLine(260)
     if igRadioButton(keyFormatItems[FORMAT_TEXT.int], keyFormatIndex.addr, 0):
       if validateHexKey(keyText):
-        isTextOnlyKey = true
-        for r in runes(pskKey):
-          if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
-            isTextOnlyKey = false
-            break
+        isTextOnlyKey = isFullyDisplayable(pskKey)
         keyText = buildKeyText(pskKey, FORMAT_TEXT)
       else:
         keyFormatIndex = FORMAT_HEX.int32
@@ -222,14 +215,12 @@ proc showWindow*(fixedFont: ptr ImFont) =
   if netConfig.secEnable:
     igText(keyText)
   else:
-    discard igInputTextCap("##pskKey", keyText,
-        if keyFormatIndex == FORMAT_TEXT.int32: PSK_KEYLEN_MAX + 1 else: keyTextCapacity,
-                           flags = keyFlags)
+    discard igInputTextCap("##pskKey", keyText, keyTextCapacity, flags = keyFlags)
   igPopFont()
   igAlignTextToFramePadding()
   igText("Client ID")
   igSameLine(80)
-  igSetNextItemWidth(150)
+  igSetNextItemWidth(300)
   discard igInputTextCap("##pskClientId", pskClientId, clientIdCapacity)
 
   igItemSize(ImVec2(x:0,y:8))
@@ -273,7 +264,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
     if netConfig.nosecEnable or netConfig.secEnable:
       igText(listenAddr)
     else:
-      discard igInputTextCap("##listenAddr", listenAddr, 64)
+      discard igInputTextCap("##listenAddr", listenAddr, listenAddrCapacity)
 
     # Secure
     colPos = 0f
@@ -296,6 +287,8 @@ proc showWindow*(fixedFont: ptr ImFont) =
 
   if igButton("Save/Execute") or isEnterPressed():
     statusText = ""
+    if tokenLen < 0 or tokenLen > 8:
+      statusText = "Token length range is 0-8"
     # Convert PSK key to seq[char].
     var isValidKey = true
     var charSeq: seq[char]
@@ -310,7 +303,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
     # statusText is updated in the validate... functions, but we just test
     # 'isValidKey' here for simplicity. 'statusText' *is* used to display any
     # error below.
-    if isValidKey:
+    if isValidKey and len(statusText) == 0:
       # Send new net config to conet.
       let netConfig = ConetConfig(listenAddr: listenAddr, nosecEnable: nosecEnable,
                                   nosecPort: nosecPort, secEnable: secEnable,
@@ -325,7 +318,8 @@ proc showWindow*(fixedFont: ptr ImFont) =
       appConfig.pskKey = charSeq
       appConfig.pskClientId = pskClientId
       appConfig.tokenLen = tokenLen
-      discard saveConfFile(appConfFile, appConfig)
+      if not saveConfFile(appConfFile, appConfig):
+        statusText = "Can't save config file"
 
   if len(statusText) > 0:
     igSameLine(120)

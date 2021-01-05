@@ -5,17 +5,17 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 import imgui
-import algorithm, json, random, strutils, std/jsonutils, tables, unicode
+import algorithm, json, random, strutils, std/jsonutils, tables
 import conet, gui/util
 
 const
-  reqHostCapacity = 64
-  reqPathCapacity = 255
+  reqHostCapacity = textCapForMaxlen(64)
+  reqPathCapacity = textCapForMaxlen(255)
     ## No need to validate user entry for this path length
-  optValueCapacity = 1034
+  optValueCapacity = textCapForMaxlen(1034)
     ## Length of the string used to edit option value; the longest possible
     ## option value.
-  reqPayloadCapacity = 1024
+  reqPayloadCapacity = textCapForMaxlen(1024)
   reqPayloadTextWidth = 48
     ## Width in chars for display of payload in text mode
 
@@ -184,11 +184,11 @@ proc buildPayloadText(paySource: string, format: PayloadFormats): string =
     # Convert any non-printable ASCII chars to a U00B7 dot. Also add line
     # break as required.
     var runeCount = 0
-    for r in runes(paySource):
-      if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
+    for c in paySource:
+      if (c < ' ') or (c > '~'):
         result.add("\u{B7}")
       else:
-        result.add(toUTF8(r))
+        result.add(c)
       runeCount += 1
       if runeCount == reqPayloadTextWidth:
         result.add("\n")
@@ -267,7 +267,7 @@ proc resetContents() =
   optionIndex = -1
   optNameIndex = 0
   cfNameIndex = 0
-  optValue = newStringofCap(optValueCapacity)
+  optValue = newStringOfCap(optValueCapacity)
   reqPayload = newStringOfCap(reqPayloadCapacity)
   isTextOnlyReqPayload = true
   optErrText = ""
@@ -345,7 +345,6 @@ proc validateHexPayload(payText: string): bool =
       for i in 0 ..< (len(text) / 2).int:
         #let charInt = fromHex[int](text.substr(i*2, i*2+1))
         #echo(format("char $#", fmt"{charInt:X}"))
-        #stripped.add(cast[char](charInt))
         stripped.add(cast[char](fromHex[int](text.substr(i*2, i*2+1))))
     reqPayload = stripped
   except ValueError:
@@ -460,7 +459,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       isNewOption = true
       isChangedOption = false
       optionIndex = -1
-      optValue = newStringofCap(optValueCapacity)
+      optValue = newStringOfCap(optValueCapacity)
     if igButton("Delete") and optionIndex >= 0:
       reqOptions.delete(optionIndex)
       # Trigger relabel on next display since index in collection may change
@@ -515,11 +514,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
     # transitioning from hex to text and contains non-editable chars.
     if igRadioButton(payFormatItems[FORMAT_TEXT.int], reqPayFormatIndex.addr, 0):
       if validateHexPayload(reqPayText):
-        isTextOnlyReqPayload = true
-        for r in runes(reqPayload):
-          if (r <% " ".runeAt(0)) or (r >% "~".runeAt(0)):
-            isTextOnlyReqPayload = false
-            break
+        isTextOnlyReqPayload = isFullyDisplayable(reqPayload)
         reqPayText = buildPayloadText(reqPayload, FORMAT_TEXT)
       else:
         reqPayFormatIndex = FORMAT_HEX.int32

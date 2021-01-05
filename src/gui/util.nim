@@ -158,6 +158,9 @@ proc igInputTextCap*(label: string, text: var string, cap: int,
                      callback: ImGuiInputTextCallback = nil): bool =
   ## Synchronizes the length property of the input Nim string with its component
   ## cstring, as it is edited by the ImGui library.
+  ## 'text' must have a buffer at least one byte longer than 'cap' to
+  ## accommodate the trailing 0x0. This requirement is met when allocating a
+  ## string with newString() or newStringOfCap().
   var isEmpty = false
   
   if len(text) == 0:
@@ -166,12 +169,35 @@ proc igInputTextCap*(label: string, text: var string, cap: int,
     # causes a segmentation fault in ImGui.
     text.setLen(1)
     isEmpty = true
-  if igInputTextEx(label, nil, text, cap.int32, size, flags, callback):
+  if igInputTextEx(label, nil, text, (cap+1).int32, size, flags, callback):
     text.setLen(len(text.cstring))
     return true
   elif isEmpty:
     text.setLen(0)
   return false
+
+proc textCapForMaxlen*(length: int): int =
+  ## Provides the length for a buffer large enough for igInputTextCap(), given
+  ## a length expressed as a count of characters.
+  ##
+  ## At time of writing, this function is somewhat defensive to make it easy to
+  ## locate/alter how this calculation is performed, particularly for Unicode
+  ## code points > U+0007F.
+  assert(length > 0)
+  # Triple the requested length to allow for %-encoded bytes (%9B), as well as
+  # hex-encoded bytes separated by a space (9B 33 C2 ...). Tripling also
+  # accommodates direct display of code points U+0080F to U+00FF, like accented
+  # letters, which are encoded as two bytes in UTF-8.
+  return length * 3
+
+proc isFullyDisplayable*(str: string): bool =
+  ## Returns true if the provided string contains only displayable ASCII
+  ## text characters.
+  result = true
+  for c in str:
+    if (c < ' ') or (c > '~'):
+      result = false
+      break
 
 proc isEnterPressed*(): bool =
   ## Returns true if the Enter key has been pressed
