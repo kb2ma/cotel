@@ -120,13 +120,15 @@ proc showNetlogWindow*() =
       filterChars.add('I')
     if levelIndex >= 3:
       filterChars.add('W')
+  igSameLine()
+  helpMarker("New log entries will be filtered at this level; existing entries are not affected")
 
-  igSameLine(190)
+  igSameLine(200)
   if igButton("Clear") or isEnterPressed():
     logLines = newSeqOfCap[string](LOG_LINES_MAX + BUFFER_LINES_MAX)
     for i in 0 ..< LOG_LINES_MAX:
       guiLines[i] = ""
-  igSameLine(250)
+  igSameLine(260)
   igText("Scroll to bottom")
   igSameLine()
   igCheckbox("##bottomCheckbox", isScrollToBottom.addr)

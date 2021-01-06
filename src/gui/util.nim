@@ -203,3 +203,13 @@ proc isEnterPressed*(): bool =
   ## Returns true if the Enter key has been pressed
   return igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
          igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
+
+proc helpMarker*(desc: string) =
+  ## Shows marker for help and displays tooltip for provided description.
+  igTextDisabled("(?)")
+  if igIsItemHovered():
+    igBeginTooltip()
+    igPushTextWrapPos(igGetFontSize() * 35.0f)
+    igTextUnformatted(desc)
+    igPopTextWrapPos()
+    igEndTooltip()

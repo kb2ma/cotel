@@ -34,7 +34,7 @@
 import imgui, imgui/[impl_opengl, impl_glfw], nimgl/[opengl, glfw]
 import json, logging, os, tables, threadpool, parseOpt, std/jsonutils, strutils,
        tempfile
-import conet, gui/[client, localhost, netlog, util]
+import conet, gui/[client, setup, netlog, util]
 
 # Disables these warnings for gui_... module imports above. The modules actually
 # *are* used, but code that generates this warning does not realize that.
@@ -108,16 +108,13 @@ proc checkNetChannel() =
   if msgTuple.dataAvailable:
     case msgTuple.msg.token
     of "local_server.open":
-      localhost.setConfig(jsonTo(parseJson(msgTuple.msg.payload),
-                          ConetConfig))
+      setup.setConfig(jsonTo(parseJson(msgTuple.msg.payload), ConetConfig))
     of "local_server.update":
       if msgTuple.msg.subject == "config.server.RESP":
         # success
-        localhost.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload),
-                                 ConetConfig))
+        setup.onConfigUpdate(jsonTo(parseJson(msgTuple.msg.payload), ConetConfig))
       elif msgTuple.msg.subject == "config.server.ERR":
-        localhost.onConfigError(jsonTo(parseJson(msgTuple.msg.payload),
-                                ConetConfig))
+        setup.onConfigError(jsonTo(parseJson(msgTuple.msg.payload), ConetConfig))
       else:
         doAssert(false, "Message not handled: " & msgTuple.msg.subject)
     else:
@@ -133,8 +130,8 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
 
   if isRequestOpen:
     showRequestWindow(monoFont)
-  if isLocalhostOpen:
-    localhost.showWindow(monoFont)
+  if isSetupOpen:
+    setup.showWindow(monoFont)
   if isNetlogOpen:
     showNetlogWindow()
   if isInfoOpen:
@@ -148,8 +145,8 @@ proc renderUi(w: GLFWWindow, width: int32, height: int32) =
       igMenuItem("New Request", nil, isRequestOpen.addr)
       igEndMenu()
     if igBeginMenu("Tools"):
-      if igMenuItem("Local Setup", nil, isLocalhostOpen.addr):
-        localhost.setPendingOpen(appConfig, confDir & CONF_FILE)
+      if igMenuItem("Local Setup", nil, isSetupOpen.addr):
+        setup.setPendingOpen(appConfig, confDir & CONF_FILE)
         ctxChan.send( CoMsg(subject: "config.server.GET",
                             token: "local_server.open") )
       igMenuItem("View Network Log", nil, isNetlogOpen.addr)

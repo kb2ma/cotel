@@ -41,7 +41,7 @@ const
   listenAddrCapacity = textCapForMaxlen(64)
 
 var
-  isLocalhostOpen* = false
+  isSetupOpen* = false
   status = STATUS_INIT
   statusText = ""
     ## result of pressing Save/Execute button
@@ -63,18 +63,8 @@ var
   secPort: int32
   listenAddr: string
 
-proc helpMarker(desc: string) =
-  ## Shows marker for help and displays tooltip for provided description.
-  igTextDisabled("(?)")
-  if igIsItemHovered():
-    igBeginTooltip()
-    igPushTextWrapPos(igGetFontSize() * 35.0f)
-    igTextUnformatted(desc)
-    igPopTextWrapPos()
-    igEndTooltip()
-
 proc setStatus(status: FormStatus, text: string = "") =
-  localhost.status = status
+  setup.status = status
   statusText = text
 
 proc buildKeyText(source: string, format: KeyFormats): string =
@@ -174,7 +164,7 @@ proc showWindow*(fixedFont: ptr ImFont) =
     return
 
   igSetNextWindowSize(ImVec2(x: 600, y: 300), FirstUseEver)
-  igBegin("Local Setup", isLocalhostOpen.addr)
+  igBegin("Local Setup", isSetupOpen.addr)
 
   igTextColored(headingColor, "Request")
   igAlignTextToFramePadding()
