@@ -1,9 +1,10 @@
 [Desktop Entry]
 Name=Cotel
 Comment=CoAP messaging GUI tool
-Exec=/home/kbee/dev/cotel/share/run/run.sh
-Icon=/home/kbee/dev/cotel/repo/resources/cotel32.png
+Exec=cotel
+Icon=cotel
 Type=Application
 Encoding=UTF-8
 Terminal=false
 StartupWMClass=cotel
+Categories=Utility;

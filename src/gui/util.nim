@@ -42,12 +42,12 @@ proc init*() =
 proc createDefaultConfFile*(): CotelConf =
   ## Creates a default application configuration file.
   result = CotelConf()
-  result.serverAddr = "::"
-  result.nosecPort = 5683
-  result.secPort = 5684
   # result.pskKey nil
   result.pskClientId = "cotel"
   result.tokenLen = 2
+  result.serverAddr = "::"
+  result.nosecPort = 5683
+  result.secPort = 5684
 
 proc readConfFile*(confName: string): CotelConf =
   ## Builds configuration object from entries in configuration file.
@@ -59,13 +59,6 @@ proc readConfFile*(confName: string): CotelConf =
   result = CotelConf()
 
   let toml = parseFile(confName)
-
-  # Server section
-  let tServ = toml["Server"]
-  
-  result.serverAddr = getStr(tServ["listen_addr"])
-  result.nosecPort = getInt(tServ["nosecPort"])
-  result.secPort = getInt(tServ["secPort"])
 
   # Security section
   let tSec = toml["Security"]
@@ -94,6 +87,13 @@ proc readConfFile*(confName: string): CotelConf =
   result.tokenLen = getInt(tClient["token_length"])
   oplog.log(lvlInfo, "Conf file read OK")
 
+  # Server section
+  let tServ = toml["Server"]
+  
+  result.serverAddr = getStr(tServ["listen_addr"])
+  result.nosecPort = getInt(tServ["nosecPort"])
+  result.secPort = getInt(tServ["secPort"])
+
 proc saveConfFile*(pathName: string, conf: CotelConf): bool =
   ## Persists configuration to the provided file. Logs any exception without
   ## re-raising, but return value indicates success/failure.
@@ -102,9 +102,9 @@ proc saveConfFile*(pathName: string, conf: CotelConf): bool =
   for c in conf.pskKey:
     pskKey.add(toHex(cast[int](c), 2))
   
-  confTable.add("Server", ?[("listen_addr", ?conf.serverAddr), ("nosecPort", ?conf.nosecPort), ("secPort", ?conf.secPort)])
   confTable.add("Security", ?[("psk_key", ?pskKey), ("client_id", ?conf.pskClientId)])
   confTable.add("Client", ?[("token_length", ?conf.tokenLen)])
+  confTable.add("Server", ?[("listen_addr", ?conf.serverAddr), ("nosecPort", ?conf.nosecPort), ("secPort", ?conf.secPort)])
   try:
     writeFile(pathName, toTomlString(confTable))
   except:
