@@ -9,7 +9,7 @@ import algorithm, json, random, strutils, std/jsonutils, tables
 import conet, gui/util
 
 const
-  reqHostCapacity = textCapForMaxlen(64)
+  reqHostCapacity = textCapForMaxlen(128)
   reqPathCapacity = textCapForMaxlen(255)
     ## No need to validate user entry for this path length
   optValueCapacity = textCapForMaxlen(1034)

@@ -37,7 +37,7 @@ const
   keyFormatItems = ["Text", "Hex"]
   # 16 pairs of hex digits with 15 spaces in between
   keyTextCapacity = textCapForMaxlen(PSK_KEYLEN_MAX)
-  clientIdCapacity = textCapForMaxlen(32)
+  clientIdCapacity = textCapForMaxlen(64)
   listenAddrCapacity = textCapForMaxlen(64)
 
 var
