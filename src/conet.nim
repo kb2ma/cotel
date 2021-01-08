@@ -33,7 +33,7 @@ else:
 
 import libcoap, nativesockets
 import json, logging, parseutils, strformat, strutils, std/jsonutils, tables
-import comsg, conet_ctx, etsi_plug, exp_resources
+import comsg, conet_ctx, etsi_plug
 # Provides the core context data for conet module users to share
 export comsg, conet_ctx, COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2,
   COAP_OPTION_CONTENT_FORMAT, COAP_OPTION_ETAG, COAP_OPTION_IF_MATCH,
@@ -406,7 +406,6 @@ proc netLoop*(config: ConetConfig) =
   # response handler.
   try:
     etsi_plug.initResources(state.ctx)
-    exp_resources.initResources(state.ctx)
 
     registerResponseHandler(state.ctx, handleResponse)
   except CatchableError as e:
