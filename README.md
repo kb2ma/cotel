@@ -44,7 +44,7 @@ The core of Cotel is written in Nim. It generates C code internally, which it th
 
 In addition, you must compile the *cimgui* shared library, which provides a C interface to Dear ImGui, which itself is written in C++. The imgui module includes the required source. Simply run `make` in the imgui module `src/imgui/private/cimgui` directory.
 
-Finally, make the cimgui library library visible to the generated Cotel executable -- via either copy/symlink to the same directory or with `ldconfig`.
+Finally, make the cimgui library visible to the generated Cotel executable -- via either copy/symlink to the same directory or with `ldconfig`.
 
 ## Building
 To build Cotel, execute the command below from the top level directory. The compiled executable will be available in the `build/bin` directory.
