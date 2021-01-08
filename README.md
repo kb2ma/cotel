@@ -7,7 +7,7 @@ Cotel provides a desktop GUI for exploration of CoAP messaging. The current rele
 
 See the screenshots in the links above.
 
-Cotel runs as a native executable. We have created an AppImage based installer for Linux, available from the [Releases](https://github.com/kb2ma/cotel/releases) page for the repository.
+Cotel runs as a native executable. We have created an AppImage based installer for Linux, available from the repository [Releases](https://github.com/kb2ma/cotel/releases) page.
 
 Of course you also may build and run from source. See *Development* below. We have not attempted to build for Windows or OSX.
 
@@ -17,7 +17,7 @@ Cotel uses [libcoap](https://libcoap.net/) for CoAP messaging, and [Dear ImGui](
 
 The AppImage installer for Linux is a single file. Simply mark it executable and run it. AppImage is designed to be agnostic to a user's particular distro. It's also possible to integrate Cotel into the desktop environment. See the AppImage [Running](https://docs.appimage.org/user-guide/run-appimages.html) page for details.
 
-See Cotel's user documentation for how to use it.
+See Cotel's [user guide](doc/user-guide.md) for details on how to use it.
 
 # Development
 
@@ -36,7 +36,7 @@ You must build libcoap from source for development, using either autotools or CM
 
 ### Nim
 
-For Nim I find it easiest to install from the *choosenim* utility, as described on the Nim install page. For Nim modules, I use the *Nimble* installer, which is bundled with Nim.
+The core of Cotel is written in Nim. It generates C code internally, which it then compiles to generate the executable. For Nim I find it easiest to install from the *choosenim* utility, as described on the Nim install page. For Nim modules, I use the *Nimble* installer, which is bundled with Nim.
 
 ### imgui
 
@@ -50,7 +50,7 @@ Finally, make the cimgui library library visible to the generated Cotel executab
 To build Cotel, execute the command below from the top level directory. The compiled executable will be available in the `build/bin` directory.
 
 ```
-   $ nim build src/gui
+   $ nim build src/gui/main
 ```
 
 ## Running
@@ -60,7 +60,7 @@ Install the generated `cotel` executable, the `cotel.conf` configuration file, a
    $ ./cotel --dev
 ```
 
-In development mode, all resources are in the startup directory. `cotel.conf` is generated with reasonable property defaults, but please review its contents for specifics.
+In development mode, all resources are in the startup directory. `cotel.conf` is generated with reasonable property defaults, but please review the Local Setup view for specifics.
 
 ## Hacking
 If you'd like to make improvements to Cotel, see the [architecture](./doc/architecture.md) document to get started.
