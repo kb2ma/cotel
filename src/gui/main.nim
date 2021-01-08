@@ -43,7 +43,7 @@ import conet, gui/[client, setup, netlog, util]
 const
   TICK_FREQUENCY = 30
     ## For tick event, approx 0.5 sec based on main loop frequency of 60 Hz
-  VERSION = "0.3"
+  VERSION = "0.2"
   CONF_FILE = "cotel.conf"
   DATA_FILE = "cotel.dat"
   GUI_LOG_FILE = "gui.log"
