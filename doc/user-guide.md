@@ -10,7 +10,7 @@ Once you start Cotel, it's functionality is available via selections from the me
 |[New Request](./snap-request.png)    |Create and send a request, and view response                                              |
 |[Local Setup](./snap-setup.png)      |Setup security parameters and Request defaults; optionally setup a CoAP server for testing|
 |[View Network Log](./snap-netlog.png)|Show recent network activity; useful to confirm operation                                 |
-|Info                                 |Show location of log files, for a full view of activity                                   |
+|Info                                 |Show application version and location of log files                                   |
 
 These functions are described in the sections below. The links above are to screenshots for reference. Finally, the *Internals* section identifies the files that comprise a Cotel installation and describes their purpose.
 
@@ -46,7 +46,6 @@ An option value is one of three types, which determines its format:
 |string|Supports only ASCII text                                                                              |
 |  uint|Non-negative integer. The Accept and Content-Format types provide a dropdown for the available values.|
 |opaque|Pair of hex digits for each octet, like `40` or `B9`. You may use a space between each pair.          |
-|
 
 ## Payload
 
