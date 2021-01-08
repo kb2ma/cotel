@@ -5,7 +5,7 @@ Cotel provides a desktop GUI for exploration of CoAP messaging, and includes the
 * [Networking log](doc/snap-netlog.png)
 * [Experimental server for testing](doc/snap-server.png)
 
-See the screenshots in the links above.
+![Alt text](doc/snap-hello.png)
 
 Cotel runs as a native executable. We have created an AppImage based installer for Linux, available from the repository [Releases](https://github.com/kb2ma/cotel/releases) page.
 
