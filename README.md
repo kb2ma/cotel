@@ -1,4 +1,4 @@
-Cotel provides a desktop GUI for exploration of CoAP messaging. The current release is v0.3, which includes these features:
+Cotel provides a desktop GUI for exploration of CoAP messaging, and includes these features:
 
 * [Client requests](doc/snap-request.png)
 * [PSK security](doc/snap-setup.png)
