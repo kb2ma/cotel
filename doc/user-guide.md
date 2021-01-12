@@ -15,7 +15,7 @@ Once you start Cotel, it's functionality is available via selections from the me
 These functions are described in the sections below. The links above are to screenshots for reference. Finally, the *Internals* section identifies the files that comprise a Cotel installation and describes their purpose.
 
 ## Messaging and Security
-Cotel support CoAP messages sent over UDP transport. A request may be secured with pre-shared key based DTLS.
+Cotel supports CoAP messages sent over UDP transport. A request may be secured with pre-shared key based DTLS.
 
 # New Request
 
