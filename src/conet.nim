@@ -6,11 +6,9 @@
 ## which monitors network sockets as well as the channels to the enclosing
 ## application. Conet provides two services:
 ##
-## * receive requests from a single server endpoint with either NoSec or PSK security
 ## * send requests to other servers, either with the secure coaps protocol or
 ##   with the insecure coap protocol
-##
-## As a CoAP server, Conet listens only for a GET request to th `/hi` resource.
+## * receive requests from one or two endpoints, for NoSec and/or PSK security
 ##
 ## Copyright 2020 Ken Bannister
 ##
