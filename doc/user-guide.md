@@ -25,11 +25,11 @@ The New Request view allows you to define a request, send it to a server, and vi
 
 Protocol, Port, and Host define where to send the request. Use of `coaps` protocol means to use a DTLS pre-shared key to encrypt the request, as defined in the Local Setup view. For Host you may use either an IPv4/IPv6 address or a host name.
 
-URI Path is encoded as one or more options in the CoAP request, but we provide a single field for ease of use. You may percent-encode characters as UTF-8, in a form like `%A7`. The URI Path field does not support inclusion of a query.
+URI Path is provided as a single entry field, and the contents are encoded as one or more Uri-Path options in the CoAP request. You may percent-encode characters as UTF-8, in a form like `%A7`. The URI Path field does not support inclusion of a query.
 
 If you select Method as PUT or POST, a Payload field appears, as described in the section below.
 
-If you select Confirm, and a response is not received within a couple of seconds, the message will be resent using CoAP's exponential backoff mechanism. Use the Network Log view to follow when a message is resent.
+If you check Confirm and a response is not received within a couple of seconds after sending, the message will be resent using CoAP's exponential backoff mechanism. Use the Network Log view to follow when a message is resent.
 
 A Token is included automatically in the request based on the token length defined in the Local Setup view.
 
@@ -39,7 +39,7 @@ This section allows addition of options to the request. Click on the Options bar
 
 For background on available options, see the relevant section of the [IANA CoRE Parameters](https://www.iana.org/assignments/core-parameters/core-parameters.xhtml#option-numbers) page. You may enter options in any order, and they will be sorted by option number in the request message.
 
-An option value is one of three types, which determines its format:
+An option value is one of three data types, which determines its format:
 
 | Type |Description                                                                                           |
 |------|------------------------------------------------------------------------------------------------------|
@@ -49,7 +49,7 @@ An option value is one of three types, which determines its format:
 
 ## Payload
 
-When the Method field is PUT or POST, the Payload multi-line text area appears. You may select either Text or Hex as the mode for entry of the payload, and switch between them. However, you cannot directly enter text if the payload data includes non-ASCII characters. In text mode, non-ASCII characters appear as a Unicode 00B7 middle dot.
+When the Method field is PUT or POST, the Payload multi-line text area appears. You may select either Text or Hex as the mode for entry of the payload, and switch between them. However, you cannot directly enter text if the payload data includes non-ASCII characters. In text mode, non-ASCII characters appear as a Unicode 00B7 middle dot (&middot;).
 
 The payload entry area does not automatically wrap entry data. However, you can manually start a new line by pressing Enter. Any end of line characters embedded in the text area will be excluded from the actual request payload.
 
@@ -57,9 +57,9 @@ The payload entry area does not automatically wrap entry data. However, you can 
 
 Once you have entered all of the request information, press Send. Normally you will see the server's response in the Response section, as described below. However, if there is an error when sending, a message will appear in red below the Send button.
 
-As mentioned above in the Basic Fields section, if the network medium is lossy and you select the Confirm option, a message may be resent a few times. See the View Network Log view to track these retries.
+As mentioned above in the Basic Fields section, if the network medium is lossy and you select the Confirm checkbox, a message may be resent a few times. See the View Network Log view to track these retries.
 
-Also, a server response may include a Block2 option, which indicates if there are more blocks in a complete response. Cotel will indicate this situation with text at the top of the Response section below. It also will request the next follow-on block automatically as it receives each response. Finally, the Response section indicates when all blocks have been received.
+Also, a server response may include a Block2 option, which indicates if there are more blocks in a complete response. Cotel notifies you of this condition with text at the top of the Response section below. It also will request the next follow-on block automatically as it receives each response. Finally, the Response section indicates when all blocks have been received.
 
 The Reset button clears some of the basic fields, all options, and any response present on the request view.
 
@@ -67,7 +67,7 @@ The Reset button clears some of the basic fields, all options, and any response 
 
 The response to a request appears below the Send and Reset buttons. It shows "complete" when no more responses are expected. (As described above a request may receive multiple responses that include a Block2 option.)
 
-The response area shows the CoAP code for the response, as well as any options and any payload. For more about options and the payload, see the descriptions above. For a response, you may only view the options and response; they are read-only.
+The response area shows the CoAP Code for the response, like 2.05, as well as any options and any payload. For more about options and the payload, see the descriptions above. For a response, you only may view the options and response; they are read-only.
 
 # Local Setup
 
@@ -79,7 +79,7 @@ Token Length specifies the count in bytes for a request token. The token content
 ## coaps Pre-Shared Key
 This section sets up the Pre-Shared Key mode for DTLS security. All requests sent with the `coaps` protocol use the same key regardless of destination server.
 
-Similar to a request payload, you may specify the key as ASCII text or hex digits. In text mode, non-ASCII octets appear as a Unicode 00B7 middle dot. We recommend use of hex mode because it provides a wider range of data for the key. The key may define up to 64 octets.
+Similar to a request payload, you may specify the key as ASCII text or hex digits. In text mode, non-ASCII octets appear as a Unicode 00B7 middle dot (&middot;). We recommend use of hex mode because it provides a wider range of data for the key. The key may define up to 64 octets.
 
 Client ID may be used by a server to identify the client. This ID must be entered as ASCII text.
 
@@ -103,9 +103,9 @@ The server provides a couple of basic resources listed below, which are based on
 
 # View Network Log and Info
 
-The network log view provides a scrolling list of the last 100 entries from the network log. The actual log, `net.log`, is stored in a temporary directory as shown in the Info view.
+The Network Log view provides a scrolling list of the last 100 entries from the network log. The actual log, `net.log`, is stored in a temporary directory as shown in the Info view.
 
-In addition to the location of the log temporary directory, the Info view shows basic descriptive information about Cotel, like the version number.
+The Info view shows the location of the temporary directory for logging, as well as basic descriptive information about Cotel, like the version number.
 
 # Cotel Internals
 
