@@ -126,6 +126,11 @@ proc buildToken(): string =
     for i in 0 ..< tokenLen:
       result.add(((tokenInt and (0xFF'u64 shl (8*i))) shr (8*i)).char)
 
+proc isPayloadMethod(): bool =
+  ## True if the selected request method carries a payload (POST or PUT), so
+  ## the payload entry is displayed and its contents are sent.
+  result = reqMethodIndex == 1 or reqMethodIndex == 2
+
 proc sendRequestNextBlock(lastBlock: MessageOption) =
   ## Requests the next response block (Block2) in sequence. The new/revised
   ## Block2 option will not be added to the displayed request options.
@@ -149,11 +154,12 @@ proc sendRequestNextBlock(lastBlock: MessageOption) =
   var msgType: string
   if reqConfirm: msgType = "CON" else: msgType = "NON"
 
+  let payload = if isPayloadMethod(): reqPayload else: ""
   var jNode = %*
     { "msgType": msgType, "uriPath": $reqPath.cstring,
       "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
       "remPort": reqPort, "method": reqMethodIndex+1, "token": buildToken(),
-      "reqOptions": toJson(nextOptions), "payload": reqPayload }
+      "reqOptions": toJson(nextOptions), "payload": payload }
   #echo("Requesting block " & $(lastValue.num + 1))
   ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
 
@@ -505,7 +511,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   #   2. Save new option (like press OK button)
   #   3. Send request (like press Send Request button)
   var isEnterHandled = false
-  if reqMethodIndex == 1 or reqMethodIndex == 2:
+  if isPayloadMethod():
     # Include payload for POST or PUT.
     igAlignTextToFramePadding()
     igText("Payload")
@@ -574,18 +580,23 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       randomize()
       tokenLen *= -1
 
+    # Payload entry is displayed only for some methods; otherwise ignore its
+    # contents rather than validate and send them.
     var isValidPayload = true
-    case reqPayFormatIndex.PayloadFormats
-    of FORMAT_TEXT:
-      validateTextPayload(reqPayText)
-    of FORMAT_Hex:
-      isValidPayload = validateHexPayload(reqPayText)
+    var payload = ""
+    if isPayloadMethod():
+      case reqPayFormatIndex.PayloadFormats
+      of FORMAT_TEXT:
+        validateTextPayload(reqPayText)
+      of FORMAT_Hex:
+        isValidPayload = validateHexPayload(reqPayText)
+      payload = reqPayload
     if isValidPayload:
       var jNode = %*
         { "msgType": msgType, "uriPath": $reqPath.cstring,
           "proto": $protoItems[reqProtoIndex], "remHost": $reqHost.cstring,
           "remPort": reqPort, "method": reqMethodIndex+1, "token": buildToken(),
-          "reqOptions": toJson(reqOptions), "payload": reqPayload }
+          "reqOptions": toJson(reqOptions), "payload": payload }
       ctxChan.send( CoMsg(subject: "send_msg", payload: $jNode) )
     isEnterHandled = true
   igSameLine(labelColWidth)
