@@ -1,0 +1,57 @@
+version: 1
+
+AppDir:
+  path: AppDir
+  app_info:
+    id: cotel
+    name: Cotel
+    icon: cotel
+    version: latest
+    exec: usr/bin/cotel
+    exec_args: "$@"
+  apt:
+    arch:
+      - __APT_ARCH__
+    sources:
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ jammy main universe
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ jammy-updates main universe
+    include:
+      - libcoap3
+      - libstdc++6
+      - libc6
+      - libgcc-s1
+      - libgl1
+      - libglvnd0
+      - libx11-6
+      - libxext6
+      - libxrandr2
+      - libxcursor1
+      - libxi6
+      - libxinerama1
+      - libxxf86vm1
+      - zlib1g
+    exclude:
+      - libnss3
+  files:
+    include:
+      - dist/linux/cotel
+      - dist/linux/libcimgui.so
+      - resources/cotel.desktop
+      - resources/cotel32.png
+  runtime:
+    env:
+      APPDIR: $APPDIR
+      LD_LIBRARY_PATH: $APPDIR/usr/lib:$LD_LIBRARY_PATH
+  test:
+    fedora:
+      image: appimagecrafters/tests-env:fedora-38
+    ubuntu:
+      image: appimagecrafters/tests-env:ubuntu-jammy
+    archlinux:
+      image: appimagecrafters/tests-env:archlinux-latest
+    script:
+      - ./AppRun --help || true
+
+AppImage:
+  arch: __APPIMAGE_ARCH__
+  update-information: guess

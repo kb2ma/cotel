@@ -25,14 +25,14 @@ Required elements:
 
 |Name   |Notes
 |-----------|---------|
-|libcoap| Use commit 1739507 of the library, from 2020-08. At time of writing, v4.2.1 from 2019-11 is the most recent tag, but we need the more recent commit.|
+|libcoap| Use libcoap v4.3.0 or newer. The required commit 1739507 (from 2020-08) is included from v4.3.0 onward.|
 |Nim    | Use v1.4.2 of the language, or higher. See [install page](https://nim-lang.org/install.html).|
 |imgui   | Nim module for GUI. Use v1.78 or higher. We currently build with v1.79. Also requires the shared library for cimgui. See details below.|
 |parsetoml| Nim module to read TOML configuration file. v0.5.0|
 |tempfile| Nim module to create temporary directory for logging. v0.1.7|
 
 ### libcoap
-You must build libcoap from source for development, using either autotools or CMake. See [BUILDING](https://github.com/obgm/libcoap/blob/1739507a1eee6f8831ca7221adaa8d5413527b7f/BUILDING). libcoap supports several TLS libraries. We have tested only with [TinyDTLS](https://github.com/eclipse/tinydtls), which may be installed as a submodule of libcoap, as described in the build instructions.
+You can use packaged libcoap releases (v4.3.0 or newer) for development and CI/release builds. Building from source is optional if your platform package manager does not provide a suitable version. libcoap supports several TLS libraries. We have tested only with [TinyDTLS](https://github.com/eclipse/tinydtls), which may be installed as a submodule of libcoap, as described in the build instructions.
 
 ### Nim
 

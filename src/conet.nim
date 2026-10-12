@@ -83,12 +83,12 @@ proc fromJsonHook*(a: var MessageOptionContext, b: JsonNode) =
   ## read it.
   a = nil
 
-proc handleResponse(context: CContext, session: CSession, sent: CPdu,
-                    received: CPdu, id: CTxid)
+proc handleResponse(session: CSession, sent: CPdu, received: CPdu,
+                    id: CTxid): CResponseResult
                     {.exportc: "hnd_response", noconv.} =
   ## Client response handler. Logs an error for an unexpected exception.
-  let codeStr = "$#.$#\n" % [fmt"{received.code shr 5}",
-                             fmt"{received.code and 0x1F:>02}"]
+  let code = getCode(received)
+  let codeStr = "$#.$#\n" % [fmt"{code shr 5}", fmt"{code and 0x1F:>02}"]
   var
     options: seq[MessageOption]
     dataStr = ""
@@ -105,11 +105,12 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
       #echo("dataStr " & dataStr)
   except:
     oplog.log(lvlError, "Error reading response: " & getCurrentExceptionMsg())
-    return
+    return COAP_RESPONSE_FAIL
 
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
-  var tokenSeq = newSeq[uint8](received.token_length)
-  copyMem(tokenSeq[0].addr, received.token, received.token_length)
+  let remote = getAddrString(addr getAddrRemote(session).`addr`.sa)
+  let token = getToken(received)
+  var tokenSeq = newSeq[uint8](token.length)
+  copyMem(tokenSeq[0].addr, token.s, token.length)
   var tokenHex: string
   for c in tokenSeq:
     tokenHex.add(toHex(cast[int](c), 2))
@@ -120,6 +121,7 @@ proc handleResponse(context: CContext, session: CSession, sent: CPdu,
   var jNode = %* { "code": codeStr, "options": toJson(options),
                    "payload": dataStr }
   netChan.send( CoMsg(subject: "response.payload", payload: $jNode) )
+  result = COAP_RESPONSE_OK
 
 
 proc handleCoapLog(level: CLogLevel, message: cstring)
@@ -212,7 +214,7 @@ proc sendMessage(ctx: CContext, config: ConetConfig, jsonStr: string) =
                                     config.pskClientId,
                                     cast[ptr uint8](addr config.pskKey[0]),
                                     config.pskKey.len.uint)
-    elif session.proto != COAP_PROTO_DTLS:
+    elif getProto(session) != COAP_PROTO_DTLS:
       raise newException(ConetError,
                          format("Protocol coaps not valid to $#", fmt"{port}"))
   else:
@@ -222,14 +224,14 @@ proc sendMessage(ctx: CContext, config: ConetConfig, jsonStr: string) =
     raise newException(ConetError, "Can't create client session")
 
   # init PDU, including type and code
-  var msgType: uint8
+  var msgType: CPduType
   if reqJson["msgType"].getStr() == "CON":
     msgType = COAP_MESSAGE_CON
   else:
     msgType = COAP_MESSAGE_NON
 
   let msgId = newMessageId(session)
-  var pdu = initPdu(msgType, reqJson["method"].getInt().uint8, msgId,
+  var pdu = initPdu(msgType, reqJson["method"].getInt().CPduCode, msgId.CTxid,
                     maxSessionPduSize(session))
   if pdu == nil:
     releaseSession(session)

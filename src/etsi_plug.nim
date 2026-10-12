@@ -21,9 +21,9 @@ type ValueBuffer = array[0..7, char]
 var testContents = "A. Corelli"
 
 proc logHandled(`method`: string, path: string, session: CSession, req: CPdu,
-                token: CCoapString) =
+                token: CBinConst) =
   ## Convenience function for handlers.
-  let remote = getAddrString(addr session.addr_info.remote.`addr`.sa)
+  let remote = getAddrString(addr getAddrRemote(session).`addr`.sa)
   var tokenSeq = newSeq[char](token.length)
   copyMem(tokenSeq[0].addr, token.s, token.length)
   var tokenHex: string
@@ -31,20 +31,20 @@ proc logHandled(`method`: string, path: string, session: CSession, req: CPdu,
     tokenHex.add(toHex(cast[int](c), 2))
     tokenHex.add(' ')
   oplog.log(lvlInfo, format("Handled $# $# from $#, ID $#, token $#", `method`,
-            path, remote, req.tid, if len(tokenHex) > 0: tokenHex else: "<none>"))
+            path, remote, getMid(req), if len(tokenHex) > 0: tokenHex else: "<none>"))
 
-proc handleTestGet(context: CContext, resource: CResource, session: CSession,
-                   req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
+proc handleTestGet(resource: CResource, session: CSession, req: CPdu,
+                   query: CCoapString, resp: CPdu)
                    {.exportc: "hnd_test_get", noconv.} =
   ## TD_COAP_CORE_01, TD_COAP_CORE_05, TD_COAP_CORE_12
-  if req.`type` == COAP_MESSAGE_CON:
-    resp.`type` = COAP_MESSAGE_ACK
+  if getType(req) == COAP_MESSAGE_CON:
+    setType(resp, COAP_MESSAGE_ACK)
   else:
-    resp.`type` = COAP_MESSAGE_NON
+    setType(resp, COAP_MESSAGE_NON)
   if len(testContents) == 0:
-    resp.code = COAP_RESPONSE_CODE_404  # Not Found
+    setCode(resp, COAP_RESPONSE_CODE_404)  # Not Found
   else:
-    resp.code = COAP_RESPONSE_CODE_205  # Content
+    setCode(resp, COAP_RESPONSE_CODE_205)  # Content
 
     # add text/plain Content-Format
     var buf: ValueBuffer
@@ -56,86 +56,86 @@ proc handleTestGet(context: CContext, resource: CResource, session: CSession,
 
     discard addData(resp, len(testContents).csize_t, testContents)
 
-  logHandled("GET", "/test", session, req, token)
+  logHandled("GET", "/test", session, req, getToken(req))
 
-proc handleTestPut(context: CContext, resource: CResource, session: CSession,
-                   req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
+proc handleTestPut(resource: CResource, session: CSession, req: CPdu,
+                   query: CCoapString, resp: CPdu)
                    {.exportc: "hnd_test_put", noconv.} =
   ## TD_COAP_CORE_03, TD_COAP_CORE_07
   ## Expects body with some text string
-  if req.`type` == COAP_MESSAGE_CON:
-    resp.`type` = COAP_MESSAGE_ACK
+  if getType(req) == COAP_MESSAGE_CON:
+    setType(resp, COAP_MESSAGE_ACK)
   else:
-    resp.`type` = COAP_MESSAGE_NON
+    setType(resp, COAP_MESSAGE_NON)
 
   var dataLen: csize_t
   var dataPtr: ptr uint8
   discard getData(req, addr dataLen, addr dataPtr)
 
   if dataLen == 0:
-    resp.code = COAP_RESPONSE_CODE_400
+    setCode(resp, COAP_RESPONSE_CODE_400)
   else:
     if len(testContents) == 0:
-      resp.code = COAP_RESPONSE_CODE_201  # Created
+      setCode(resp, COAP_RESPONSE_CODE_201)  # Created
     else:
-      resp.code = COAP_RESPONSE_CODE_204  # Changed
+      setCode(resp, COAP_RESPONSE_CODE_204)  # Changed
 
     var dataStr = newString(dataLen)
     copyMem(addr dataStr[0], dataPtr, dataLen)
     testContents = dataStr
 
-  logHandled("PUT", "/test", session, req, token)
+  logHandled("PUT", "/test", session, req, getToken(req))
 
-proc handleTestPost(context: CContext, resource: CResource, session: CSession,
-                   req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
+proc handleTestPost(resource: CResource, session: CSession, req: CPdu,
+                   query: CCoapString, resp: CPdu)
                    {.exportc: "hnd_test_post", noconv.} =
   ## TD_COAP_CORE_04, TD_COAP_CORE_08
   ## Expects body with some text string
-  if req.`type` == COAP_MESSAGE_CON:
-    resp.`type` = COAP_MESSAGE_ACK
+  if getType(req) == COAP_MESSAGE_CON:
+    setType(resp, COAP_MESSAGE_ACK)
   else:
-    resp.`type` = COAP_MESSAGE_NON
+    setType(resp, COAP_MESSAGE_NON)
 
   var dataLen: csize_t
   var dataPtr: ptr uint8
   discard getData(req, addr dataLen, addr dataPtr)
 
   if dataLen == 0:
-    resp.code = COAP_RESPONSE_CODE_400
+    setCode(resp, COAP_RESPONSE_CODE_400)
   else:
     if len(testContents) == 0:
-      resp.code = COAP_RESPONSE_CODE_201  # Created
+      setCode(resp, COAP_RESPONSE_CODE_201)  # Created
     else:
-      resp.code = COAP_RESPONSE_CODE_204  # Changed
+      setCode(resp, COAP_RESPONSE_CODE_204)  # Changed
 
     var dataStr = newString(dataLen)
     copyMem(addr dataStr[0], dataPtr, dataLen)
     testContents = dataStr
 
-  if resp.code == COAP_RESPONSE_CODE_201:
+  if getCode(resp) == COAP_RESPONSE_CODE_201:
     # add Location-Path option
     var path = "test"
     var optlist = newOptlist(COAP_OPTION_LOCATION_PATH.uint16, len(path).csize_t,
                              cast[ptr uint8](path[0].addr))
     discard addOptlistPdu(resp, addr optlist)
 
-  logHandled("POST", "/test", session, req, token)
+  logHandled("POST", "/test", session, req, getToken(req))
 
-proc handleTestDelete(context: CContext, resource: CResource, session: CSession,
-                   req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
+proc handleTestDelete(resource: CResource, session: CSession, req: CPdu,
+                   query: CCoapString, resp: CPdu)
                    {.exportc: "hnd_test_delete", noconv.} =
   ## TD_COAP_CORE_02, TD_COAP_CORE_06
-  if req.`type` == COAP_MESSAGE_CON:
-    resp.`type` = COAP_MESSAGE_ACK
+  if getType(req) == COAP_MESSAGE_CON:
+    setType(resp, COAP_MESSAGE_ACK)
   else:
-    resp.`type` = COAP_MESSAGE_NON
+    setType(resp, COAP_MESSAGE_NON)
   if len(testContents) > 0:
-    resp.code = COAP_RESPONSE_CODE_202  # Deleted
+    setCode(resp, COAP_RESPONSE_CODE_202)  # Deleted
   else:
-    resp.code = COAP_RESPONSE_CODE_404  # Not Found
+    setCode(resp, COAP_RESPONSE_CODE_404)  # Not Found
 
   testContents = ""
-  logHandled("DELETE", "/test", session, req, token)
+  logHandled("DELETE", "/test", session, req, getToken(req))
 
 #
 # /validate resource, for ETag
@@ -155,15 +155,15 @@ for i in 0..(ETAG_LEN-1):
   # define etag bytes in big endian order
   valSourceEtag[(ETAG_LEN-1)-i] = cast[char]((etag.uint and (0xFF'u shl (8*i))) shr (8*i))
 
-proc handleValidateGet(context: CContext, resource: CResource, session: CSession,
-                       req: CPdu, token: CCoapString, query: CCoapString, resp: CPdu)
+proc handleValidateGet(resource: CResource, session: CSession, req: CPdu,
+                       query: CCoapString, resp: CPdu)
                       {.exportc: "hnd_validate_get", noconv.} =
   ## TD_COAP_CORE_21
   ## Uses 4-byte hash for ETag
-  if req.`type` == COAP_MESSAGE_CON:
-    resp.`type` = COAP_MESSAGE_ACK
+  if getType(req) == COAP_MESSAGE_CON:
+    setType(resp, COAP_MESSAGE_ACK)
   else:
-    resp.`type` = COAP_MESSAGE_NON
+    setType(resp, COAP_MESSAGE_NON)
 
   # Don't send payload if ETag indicates client already has it
   var isReqEtagValid = false
@@ -189,13 +189,13 @@ proc handleValidateGet(context: CContext, resource: CResource, session: CSession
 
   # Return payload only if request does not include ETag for contents
   if isReqEtagValid:
-    resp.code = COAP_RESPONSE_CODE_203  # Valid
+    setCode(resp, COAP_RESPONSE_CODE_203)  # Valid
   else:
-    resp.code = COAP_RESPONSE_CODE_205  # Content
+    setCode(resp, COAP_RESPONSE_CODE_205)  # Content
     let contents = valSourceItems[valSourceIndex]
     discard addData(resp, len(contents).csize_t, contents)
-    
-  logHandled("GET", "/validate", session, req, token)
+
+  logHandled("GET", "/validate", session, req, getToken(req))
 
 proc initResources*(ctx: CContext) =
   var r = initResource(makeStringConst("test"), 0)

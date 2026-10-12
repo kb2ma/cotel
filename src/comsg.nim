@@ -104,12 +104,12 @@ proc genBlockValueInt*(num: int, more: bool, size: int): int =
 proc readOptions*(pdu: CPdu): seq[MessageOption] =
   ## Reads and returns all options from the provided PDU. A caller should wrap
   ## this function in a try: block for unexpected errors.
-  var it = new COptIterator
+  var it: COptIterator
 
-  discard initOptIterator(pdu, it, COAP_OPT_ALL)
+  discard initOptIterator(pdu, it.addr, COAP_OPT_ALL)
   var itIndex = 0
   while true:
-    let rawOpt = nextOption(it)
+    let rawOpt = nextOption(it.addr)
     if rawOpt == nil:
       break
     #echo("optType " & $it.optType)

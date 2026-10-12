@@ -413,7 +413,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
   var isSubmitOption = false
   var optType: OptionType
   let optControlWidth = 80f
-  let optListWidth = max(350, igGetWindowContentRegionWidth() - 80)
+  let optListWidth = max(350f, igGetWindowContentRegionWidth() - 80f)
   igItemSize(ImVec2(x:0,y:8))
   if igCollapsingHeader("Options"):
     # Must create child to limit length of separator
@@ -474,7 +474,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
       if igComboNamedObj[OptionType]("##optName", optNameIndex, optionTypes):
         isChangedOption = true
       igSameLine()
-      igSetNextItemWidth(180 + max(0, igGetWindowContentRegionWidth() - 430))
+      igSetNextItemWidth(180 + max(0f, igGetWindowContentRegionWidth() - 430f))
       optType = optionTypes[optNameIndex]
       case optType.id
       of COAP_OPTION_ACCEPT, COAP_OPTION_CONTENT_FORMAT:
@@ -526,7 +526,7 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
         validateTextPayload(reqPayText)
       reqPayText = buildPayloadText(reqPayload, FORMAT_HEX)
 
-    var payFlags = ImGuiInputTextFlags.Multiline.int32 or
+    var payFlags = ImGuiInputTextFlagsPrivate.Multiline.int32 or
                    ImGuiInputTextFlags.CallbackCharFilter.int32
     # Can't edit in text mode if contains non-editable chars
     if not isTextOnlyReqPayload and reqPayFormatIndex == FORMAT_TEXT.int32:
@@ -673,9 +673,11 @@ proc showRequestWindow*(fixedFont: ptr ImFont) =
 
       igSetNextItemWidth(420)
       igPushFont(fixedFont)
+      let respPayFlags = ImGuiInputTextFlagsPrivate.Multiline.int32 or
+                         ImGuiInputTextFlags.ReadOnly.int32
       discard igInputTextCap("##respPayload", respPayText, len(respPayText),
                              ImVec2(x: 0f, y: igGetTextLineHeightWithSpacing() * 8),
-                             (ImGuiInputTextFlags.Multiline.int or ImGuiInputTextFlags.ReadOnly.int).ImGuiInputTextFlags)
+                             respPayFlags.ImGuiInputTextFlags)
       igPopFont()
 
   igEnd()

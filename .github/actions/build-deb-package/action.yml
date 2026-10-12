@@ -1,0 +1,35 @@
+name: Build deb package
+description: Build a Debian package for Cotel.
+inputs:
+  version:
+    description: Git tag name (vX.Y.Z or X.Y.Z).
+    required: true
+  binary_path:
+    description: Path to built linux binary.
+    required: true
+  desktop_file:
+    description: Path to desktop file.
+    required: true
+  icon_file:
+    description: Path to icon file.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Build deb with fpm
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        VERSION="${VERSION#v}"
+        ROOT="dist/deb-root"
+        mkdir -p "$ROOT/usr/bin"
+        mkdir -p "$ROOT/usr/share/applications"
+        mkdir -p "$ROOT/usr/share/icons/hicolor/32x32/apps"
+
+        cp "${{ inputs.binary_path }}" "$ROOT/usr/bin/cotel"
+        cp "${{ inputs.desktop_file }}" "$ROOT/usr/share/applications/cotel.desktop"
+        cp "${{ inputs.icon_file }}" "$ROOT/usr/share/icons/hicolor/32x32/apps/cotel.png"
+
+        gem install --no-document fpm
+        fpm -s dir -t deb -n cotel -v "$VERSION" -C "$ROOT" .
+        mv cotel_*_amd64.deb "dist/release/cotel-${VERSION}-amd64.deb"

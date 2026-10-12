@@ -1,6 +1,6 @@
 ## Straightforward wrapper module for libcoap. Click on the `{...}` for a proc
 ## to see the corresponding libcoap function name. libcoap provides
-## [online documentation](https://libcoap.net/doc/reference/4.2.1/), or you
+## [online documentation](https://libcoap.net/doc/reference/4.3.x/), or you
 ## may build it yourself from [source](https://github.com/obgm/libcoap).
 ##
 ## Copyright 2020 Ken Bannister
@@ -14,15 +14,53 @@ else:
   import posix
 import nativesockets
 
-# only supports Linux at present
-const libName = "libcoap-2.so"
+when defined(windows):
+  # vcpkg's libcoap port only builds a static library on Windows ("dllexport
+  # is not supported"), so link coap-3.lib directly rather than loading a DLL.
+  # The install prefix (containing include/ and lib/) is taken from
+  # -d:libcoapRoot=<dir>, or else from the VCPKG_INSTALLED environment variable.
+  import std/os
+  const libcoapRoot {.strdefine.} = getEnv("VCPKG_INSTALLED")
+  when libcoapRoot.len > 0:
+    {.passC: "-I" & quoteShell(libcoapRoot / "include").}
+  when defined(vcc):
+    when libcoapRoot.len > 0:
+      {.passL: "/LIBPATH:" & quoteShell(libcoapRoot / "lib").}
+    {.passL: "coap-3.lib ws2_32.lib iphlpapi.lib".}
+  else:
+    when libcoapRoot.len > 0:
+      {.passL: "-L" & quoteShell(libcoapRoot / "lib").}
+    {.passL: "-lcoap-3 -lws2_32 -liphlpapi".}
+elif defined(macosx):
+  # Homebrew's libcoap. Its prefix is not on the default include or dlopen()
+  # search paths, so add it explicitly; take it from -d:libcoapRoot=<dir>, or
+  # else from the LIBCOAP_BREW_PREFIX/HOMEBREW_PREFIX environment variables.
+  # At runtime prefer a copy bundled in Cotel.app/Contents/Frameworks.
+  import std/os
+  const libcoapRoot {.strdefine.} =
+    if existsEnv("LIBCOAP_BREW_PREFIX"): getEnv("LIBCOAP_BREW_PREFIX")
+    elif existsEnv("HOMEBREW_PREFIX"): getEnv("HOMEBREW_PREFIX")
+    elif defined(arm64): "/opt/homebrew"
+    else: "/usr/local"
+  {.passC: "-I" & quoteShell(libcoapRoot / "include").}
+  const libName = "(@executable_path/../Frameworks/|" & libcoapRoot &
+                  "/lib/|)libcoap-3-openssl(.3|).dylib"
+else:
+  const libName = "libcoap-3-openssl.so(|.3)"
 
 type
-  CProto* = uint8
+  CProto* = cint
   ## coap_proto_t
   COpt = uint8
 
   CTxid* = cint
+  ## coap_mid_t
+
+  CPduType* = cint
+  ## coap_pdu_type_t
+
+  CPduCode* = cint
+  ## coap_pdu_code_t
 
 const
   COAP_PROTO_NONE* = 0.CProto
@@ -32,18 +70,18 @@ const
   COAP_PROTO_TLS* = 4.CProto
 
   # Message types
-  COAP_MESSAGE_CON* = 0'u8
-  COAP_MESSAGE_NON* = 1'u8
-  COAP_MESSAGE_ACK* = 2'u8
-  COAP_MESSAGE_RST* = 3'u8
+  COAP_MESSAGE_CON* = 0.CPduType
+  COAP_MESSAGE_NON* = 1.CPduType
+  COAP_MESSAGE_ACK* = 2.CPduType
+  COAP_MESSAGE_RST* = 3.CPduType
 
-  COAP_RESPONSE_CODE_201* = ((2 shl 5) or 1).uint8
-  COAP_RESPONSE_CODE_202* = ((2 shl 5) or 2).uint8
-  COAP_RESPONSE_CODE_203* = ((2 shl 5) or 3).uint8
-  COAP_RESPONSE_CODE_204* = ((2 shl 5) or 4).uint8
-  COAP_RESPONSE_CODE_205* = ((2 shl 5) or 5).uint8
-  COAP_RESPONSE_CODE_400* = ((4 shl 5) or 0).uint8
-  COAP_RESPONSE_CODE_404* = ((4 shl 5) or 4).uint8
+  COAP_RESPONSE_CODE_201* = ((2 shl 5) or 1).CPduCode
+  COAP_RESPONSE_CODE_202* = ((2 shl 5) or 2).CPduCode
+  COAP_RESPONSE_CODE_203* = ((2 shl 5) or 3).CPduCode
+  COAP_RESPONSE_CODE_204* = ((2 shl 5) or 4).CPduCode
+  COAP_RESPONSE_CODE_205* = ((2 shl 5) or 5).CPduCode
+  COAP_RESPONSE_CODE_400* = ((4 shl 5) or 0).CPduCode
+  COAP_RESPONSE_CODE_404* = ((4 shl 5) or 4).CPduCode
 
   # CoAP options. Considered use of an enum, but the conet module provides a
   # table of OptionType tuples, which is a better match for application use.
@@ -70,8 +108,6 @@ const
 
   COAP_INVALID_TXID* = -1.CTxid
   COAP_IO_WAIT* = 0
-  COAP_OPT_FILTER_SIZE = 6
-  COAP_OPT_ALL* = cast[ptr uint16](nil)
 
 type
   CRequestCode* = enum
@@ -80,8 +116,14 @@ type
     COAP_REQUEST_POST,
     COAP_REQUEST_PUT,
     COAP_REQUEST_DELETE,
+    COAP_REQUEST_FETCH,
     COAP_REQUEST_PATCH,
     COAP_REQUEST_IPATCH
+
+  CResponseResult* = enum
+    ## coap_response_t, returned by a CResponseHandler
+    COAP_RESPONSE_FAIL,
+    COAP_RESPONSE_OK
 
   CLogLevel* = enum
     ## coap_log_t logging levels
@@ -102,105 +144,85 @@ type
     sin6*: Sockaddr_in6
 
   CSockAddr* {.importc: "struct coap_address_t",
-              header: "<coap2/address.h>".} = object
+              header: "<coap3/coap.h>".} = object
     ## libcoap internal socket address
     size*: SockLen
     `addr`*: CSockAddrUnion
 
-  CAddrTuple* {.importc: "struct coap_addr_tuple_t",
-               header: "<coap2/coap_io.h>".} = object
-    remote*: CSockAddr
-    local*: CSockAddr
-
   CStringConst* {.importc: "struct coap_str_const_t",
-                 header: "<coap2/str.h>"} = ptr object
+                 header: "<coap3/coap.h>"} = ptr object
 
-  CHashHandle* {.importc: "struct UT_hash_handle",
-                header: "<coap2/uthash.h>".} = object
+  CBinConst* {.importc: "struct coap_bin_const_t",
+              header: "<coap3/coap.h>"} = object
+    ## Returned by getToken(); holds a PDU's token
+    length*: csize_t
+    s*: ptr uint8
 
   CContext* {.importc: "struct coap_context_t",
-                 header: "<coap2/net.h>"} = ptr object
+                 header: "<coap3/coap.h>"} = ptr object
     ## libcoap top-level data object; libcoap always manages heap memory
-    #response_handler*: pointer
 
   CEndpoint* = ptr object
     ## libcoap coap_endpoint_t
     proto*: CProto
 
   CResource* {.importc: "struct coap_resource_t",
-                 header: "<coap2/resource.h>"} = ptr object
+                 header: "<coap3/coap.h>"} = ptr object
 
   CSession* {.importc: "struct coap_session_t",
-                 header: "<coap2/coap_session.h>"} = ptr object
-    proto*: CProto
-    `type`*: uint8
-    state*: uint8
-    `ref`*: cuint
-    tls_overhead*: cuint
-    mtu*: culonglong
-    local_if*: CSockAddr
-    hh*: CHashHandle
-    addr_info*: CAddrTuple
-    ifindex*: cint
+                 header: "<coap3/coap.h>"} = ptr object
+    ## Opaque as of libcoap 3.x; use the getXxx() accessors below rather than
+    ## reading fields directly.
 
-  CPdu* = ptr object
-    ## coap_pdu_t
-    `type`*: uint8
-    code*: uint8
-    max_hdr_size: uint8
-    hdr_size: uint8
-    token_length*: uint8
-    tid*: uint16
-    max_delta: uint16
-    alloc_size: csize_t
-    used_size: csize_t
-    max_size: csize_t
-    token*: ptr uint8
-    data: ptr uint8
+  CPdu* {.importc: "struct coap_pdu_t",
+             header: "<coap3/coap.h>"} = ptr object
+    ## Opaque as of libcoap 3.x; use the getXxx()/setXxx() accessors below
+    ## rather than reading/writing fields directly.
 
   COptlist* = ptr object
 
-  COptFilter* = array[COAP_OPT_FILTER_SIZE, uint16]
+  COptFilter* {.importc: "struct coap_opt_filter_t",
+               header: "<coap3/coap.h>".} = object
 
-  COptIterator* = ref object
-    length*: csize_t
-    optType*: uint16
-    # flags really is a couple of bit fields, but we don't care
-    flags: cuint
-    next_option: ptr COpt
-    filter: COptFilter
+  COptIterator* {.importc: "coap_opt_iterator_t",
+                  header: "<coap3/coap.h>".} = object
+    ## Only the field the app actually reads is declared; the C header owns
+    ## the rest of the (otherwise transparent) layout.
+    optType* {.importc: "number".}: uint16
 
   CCoapBinary* = ptr object
 
   CCoapString* {.importc: "struct coap_string_t",
-                 header: "<coap2/str.h>"} = ptr object
+                 header: "<coap3/coap.h>"} = ptr object
     length*: csize_t
     s*: ptr uint8
 
-  CRequestHandler* = proc (context: CContext, resource: CResource,
-                           session: CSession, req: CPdu, token: CCoapString,
+  CRequestHandler* = proc (resource: CResource, session: CSession, req: CPdu,
                            query: CCoapString, resp: CPdu) {.noconv.}
 
-  CResponseHandler* = proc (context: CContext, session: CSession, sent: CPdu,
-                            received: CPdu, id: CTxid) {.noconv.}
+  CResponseHandler* = proc (session: CSession, sent: CPdu, received: CPdu,
+                            id: CTxid): CResponseResult {.noconv.}
 
   CLogHandler* = proc (level: CLogLevel, message: cstring) {.noconv.}
 
+const
+  COAP_OPT_ALL* = cast[ptr COptFilter](nil)
 
-{.push dynlib: libName.}
+when defined(windows):
+  {.push cdecl.}
+else:
+  {.push dynlib: libName.}
 # net.h
 proc freeContext*(context: CContext) {.importc: "coap_free_context".}
 
 proc newContext*(listen_addr: ptr CSockAddr): CContext
                 {.importc: "coap_new_context".}
 
-proc newMessageId*(session: CSession): uint16 {.header: "coap2/net.h",
-                   importc: "coap_new_message_id".}
+proc newMessageId*(session: CSession): uint16
+                  {.importc: "coap_new_message_id".}
 
-# Must include header pragma because library function is 'static inline'.
 proc registerResponseHandler*(context: CContext, handler: CResponseHandler)
-                             {.header: "coap2/net.h",
-                               importc: "coap_register_response_handler".}
+                             {.importc: "coap_register_response_handler".}
 
 proc send*(session: CSession, pdu: CPdu): CTxid {.importc: "coap_send".}
 
@@ -213,6 +235,12 @@ proc findSession*(context: CContext, remote: ptr CSockAddr,
                  {.importc: "coap_session_get_by_peer".}
 
 proc freeEndpoint*(ep: CEndpoint) {.importc: "coap_free_endpoint".}
+
+proc getAddrRemote*(session: CSession): ptr CSockAddr
+                   {.importc: "coap_session_get_addr_remote".}
+
+proc getProto*(session: CSession): CProto
+              {.importc: "coap_session_get_proto".}
 
 proc maxSessionPduSize*(session: CSession): csize_t
                        {.importc: "coap_session_max_pdu_size".}
@@ -255,10 +283,23 @@ proc deletePdu*(pdu: CPdu) {.importc: "coap_delete_pdu".}
 proc getData*(pdu: CPdu, len: ptr csize_t, data: ptr ptr uint8): cint
              {.importc: "coap_get_data".}
 
-proc initPdu*(`type`: uint8, code: uint8, txid: uint16 = 0, size: csize_t): CPdu
+proc initPdu*(`type`: CPduType, code: CPduCode, txid: CTxid = 0.CTxid,
+             size: csize_t): CPdu
              {.importc: "coap_pdu_init".}
   ## 'type' is one of the COAP_MESSAGE... constants
   ## 'code' param value is CRequestCode for a request
+
+proc getType*(pdu: CPdu): CPduType {.importc: "coap_pdu_get_type".}
+
+proc setType*(pdu: CPdu, `type`: CPduType) {.importc: "coap_pdu_set_type".}
+
+proc getCode*(pdu: CPdu): CPduCode {.importc: "coap_pdu_get_code".}
+
+proc setCode*(pdu: CPdu, code: CPduCode) {.importc: "coap_pdu_set_code".}
+
+proc getMid*(pdu: CPdu): CTxid {.importc: "coap_pdu_get_mid".}
+
+proc getToken*(pdu: CPdu): CBinConst {.importc: "coap_pdu_get_token".}
 
 # option.h
 proc addOptlistPdu*(pdu: CPdu, chain: ptr COptlist): cint
@@ -273,17 +314,18 @@ proc insertOptlist*(chain: ptr COptlist, optlist: COptlist): cint
 proc newOptlist*(number: uint16, length: csize_t, data: ptr uint8): COptlist
                 {.importc: "coap_new_optlist".}
 
-proc setOptFilterSet*(filter: COptFilter, ftype: uint16): cint
+proc setOptFilterSet*(filter: ptr COptFilter, number: uint16): cint
                      {.importc: "coap_option_filter_set".}
 
-# Must set filter type as below, rather than the filter itself, a uint16 array.
-# The empty filter is defined as NULL; i.e., it treats the array as a pointer.
-proc initOptIterator*(pdu: CPdu, oi: COptIterator, filter: ptr uint16): COptIterator
+# Must set filter type as below, rather than the filter itself. The empty
+# filter is defined as NULL; i.e., it treats the pointer as absent.
+proc initOptIterator*(pdu: CPdu, oi: ptr COptIterator,
+                      filter: ptr COptFilter): ptr COptIterator
                      {.importc: "coap_option_iterator_init".}
 
-proc nextOption*(oi: COptIterator): ptr COpt {.importc: "coap_option_next".}
+proc nextOption*(oi: ptr COptIterator): ptr COpt {.importc: "coap_option_next".}
 
-proc optLength*(opt: ptr COpt): uint16 {.importc: "coap_opt_length".}
+proc optLength*(opt: ptr COpt): uint32 {.importc: "coap_opt_length".}
 
 proc optValue*(opt: ptr COpt): ptr uint8 {.importc: "coap_opt_value".}
 

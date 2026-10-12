@@ -39,7 +39,7 @@ var
     ## count of lines in guiLines; less than LOG_LINES_MAX until it fills up
   levelIndex = 0
     ## selected minimum log level
-  filterChars = cast[seq[char]](@[])
+  filterChars: seq[char] = @[]
     ## Characters to filter against when reading new lines in network log. For
     ## example, if filter includes 'D', debug log level messages will be
     ## excluded from display.

@@ -1,0 +1,45 @@
+name: Package macOS app
+description: Create a macOS .app bundle and zip archive for Cotel.
+inputs:
+  version:
+    description: Git tag name (vX.Y.Z or X.Y.Z).
+    required: true
+  binary_path:
+    description: Path to built macOS binary.
+    required: true
+  config_file:
+    description: Path to runtime config file.
+    required: true
+  icon_file:
+    description: Path to icon file.
+    required: true
+  libcoap_brew_prefix:
+    description: Homebrew prefix where libcoap is installed.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Build app bundle and zip
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        VERSION="${VERSION#v}"
+        APP="dist/Cotel.app"
+        mkdir -p "$APP/Contents/MacOS"
+        mkdir -p "$APP/Contents/Resources"
+        mkdir -p "$APP/Contents/Frameworks"
+
+        cp "${{ inputs.binary_path }}" "$APP/Contents/MacOS/cotel"
+        cp "${{ inputs.config_file }}" "$APP/Contents/Resources/cotel.conf"
+        cp "${{ inputs.icon_file }}" "$APP/Contents/Resources/cotel.png"
+
+        if [ -n "${{ inputs.libcoap_brew_prefix }}" ] && [ -d "${{ inputs.libcoap_brew_prefix }}/lib" ]; then
+          find "${{ inputs.libcoap_brew_prefix }}/lib" -maxdepth 1 -type f \( -name 'libcoap*.dylib' -o -name 'libcoap-*.dylib' \) -exec cp {} "$APP/Contents/Frameworks/" \;
+        fi
+
+        cp "${{ github.workspace }}/resources/cotel.plist" "$APP/Contents/Info.plist"
+        sed -i "s/@VERSION@/${VERSION}/g" "$APP/Contents/Info.plist"
+
+        chmod +x "$APP/Contents/MacOS/cotel"
+        (cd dist && zip -r "cotel-macos.zip" "Cotel.app")

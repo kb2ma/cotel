@@ -204,6 +204,14 @@ proc isEnterPressed*(): bool =
   return igIsWindowFocused(ImGuiFocusedFlags.RootWindow) and
          igIsKeyReleased(igGetKeyIndex(ImGuiKey.Enter))
 
+proc igGetWindowContentRegionWidth*(): float32 =
+  ## Compat shim for the ImGui function of the same name, removed from this
+  ## binding's public API. Matches its original definition.
+  var contentMax, contentMin: ImVec2
+  igGetWindowContentRegionMaxNonUDT(contentMax.addr)
+  igGetWindowContentRegionMinNonUDT(contentMin.addr)
+  result = contentMax.x - contentMin.x
+
 proc helpMarker*(desc: string) =
   ## Shows marker for help and displays tooltip for provided description.
   igTextDisabled("(?)")
